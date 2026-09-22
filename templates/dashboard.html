@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+
+</head>
+
+<body>
+
+    <!--SIDEBAR-->
+    <aside>
+        <div class="brand">
+            <div class="brand-icon">
+                <!--Change later-->
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    class="lucide lucide-shield preview-icon">
+                    <path
+                        d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+                </svg>
+            </div>
+            <div class="brand-text">
+                <h2>BARANGAY SYSTEM</h2>
+                <p>Barangay 4, San Mateo, Isabela</p>
+            </div>
+        </div>
+
+        <!--NAVIGATION-->
+        <nav>
+            <a href="#" class="active">
+                <span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="lucide lucide-layout-dashboard preview-icon">
+                        <rect width="7" height="9" x="3" y="3" rx="1" />
+                        <rect width="7" height="5" x="14" y="3" rx="1" />
+                        <rect width="7" height="9" x="14" y="12" rx="1" />
+                        <rect width="7" height="5" x="3" y="16" rx="1" />
+                    </svg>
+                </span>
+                <span>Dashboard</span>
+            </a>
+            <a href="/barangay-queue-system-main/templates/client_registration.html">
+                <span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="lucide lucide-user-plus preview-icon">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <line x1="19" x2="19" y1="8" y2="14" />
+                        <line x1="22" x2="16" y1="11" y2="11" />
+                    </svg>
+                </span>
+                <span>Client Registration</span>
+            </a>
+            <a href="#">
+                <span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="lucide lucide-list-ordered preview-icon">
+                        <path d="M11 5h10" />
+                        <path d="M11 12h10" />
+                        <path d="M11 19h10" />
+                        <path d="M4 4h1v5" />
+                        <path d="M4 9h2" />
+                        <path d="M6.5 20H3.4c0-1 2.6-1.925 2.6-3.5a1.5 1.5 0 0 0-2.6-1.02" />
+                    </svg>
+                </span>
+                <span>Queue Management</span>
+            </a>
+            <a href="#">
+                <span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="lucide lucide-calendar preview-icon">
+                        <path d="M8 2v3" />
+                        <path d="M16 2v3" />
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <path d="M3 9h18" />
+                    </svg>
+                </span>
+                <span>Attendance</span>
+            </a>
+            <a href="#">
+                <span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="lucide lucide-landmark preview-icon">
+                        <path d="M10 18v-7" />
+                        <path
+                            d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z" />
+                        <path d="M14 18v-7" />
+                        <path d="M18 18v-7" />
+                        <path d="M3 22h18" />
+                        <path d="M6 18v-7" />
+                    </svg>
+                </span>
+                <span>Services</span>
+            </a>
+        </nav>
+    </aside>
+
+    <!--MAIN CONTENT-->
+    <main>
+        <!--TOP HEADER-->
+        <header>
+            <div class="header-left">
+                <h1>Barangay Queue &amp; Service Management</h1>
+                <span></span>
+                <p>Dashboard Overview</p>
+            </div>
+
+            <div class="header-right">
+                <div class="active-queue">
+                    <p>Active Queue: <span>12</span></p>
+                </div>
+
+                <div class="profile">
+                    <span>MJ</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="content-container">
+            <!--PERFORMANCE SNAPSHOT-->
+            <section class="performance-section">
+                <div class="content-header-row">
+
+                    <h2>Performance Snapshot</h2>
+
+                    <div class="date-display">
+                        <span>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round" class="lucide lucide-calendar preview-icon">
+                                <path d="M8 2v3" />
+                                <path d="M16 2v3" />
+                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                <path d="M3 9h18" />
+                            </svg>
+                        </span>
+                        <p>Today: <span>October 24, 2026</span></p>
+                    </div>
+                </div>
+
+                <div class="statistics-grid">
+
+                    <article>
+                        <!--TOTAL CLIENTS-->
+                        <div class="stat-card">
+                            <div class="stat-card-top">
+                                <span>Total Clients Today</span>
+
+                                <span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                        fill="none" stroke="#0000ff" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" class="lucide lucide-user-round preview-icon">
+                                        <circle cx="12" cy="8" r="5" />
+                                        <path d="M20 21a8 8 0 0 0-16 0" />
+                                    </svg>
+                                </span>
+
+                            </div>
+                            <div class="stat-card-number">
+                                342
+                            </div>
+                            <div class="stat-card-description">
+                                Active &amp; processed visitors
+                            </div>
+
+                        </div>
+
+                        <!--TICKET ISSUED-->
+                        <div class="stat-card">
+                            <div class="stat-card-top">
+                                <span>Ticket Issued</span>
+
+                                <span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                        fill="none" stroke="#f47b20" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        class="lucide lucide-file-chart-column-increasing preview-icon">
+                                        <path
+                                            d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+                                        <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+                                        <path d="M8 18v-2" />
+                                        <path d="M12 18v-4" />
+                                        <path d="M16 18v-6" />
+                                    </svg>
+                                </span>
+
+                            </div>
+                            <div class="stat-card-number">
+                                356
+                            </div>
+                            <div class="stat-card-description">
+                                Cumulative prints generated
+                            </div>
+
+                        </div>
+
+                        <!--CURRENTLY SERVING-->
+                        <div class="stat-card">
+                            <div class="stat-card-top">
+                                <span>Currently Serving</span>
+
+                                <span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                        fill="none" stroke="#20b982" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" class="lucide lucide-users-round preview-icon">
+                                        <path d="M18 21a8 8 0 0 0-16 0" />
+                                        <circle cx="10" cy="8" r="5" />
+                                        <path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3" />
+                                    </svg>
+                                </span>
+
+                            </div>
+                            <div class="stat-card-number">
+                                6
+                            </div>
+                            <div class="stat-card-description">
+                                Active Window Counter
+                            </div>
+
+                        </div>
+
+                        <!--COMPLETED SERVICES-->
+                        <div class="stat-card">
+                            <div class="stat-card-top">
+                                <span>Completed Services</span>
+
+                                <span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                        fill="none" stroke="#34496c" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" class="lucide lucide-circle-check-big preview-icon">
+                                        <path d="M21.801 10A10 10 0 1 1 17 3.335" />
+                                        <path d="m9 11 3 3L22 4" />
+                                    </svg>
+                                </span>
+
+                            </div>
+                            <div class="stat-card-number">
+                                318
+                            </div>
+                            <div class="stat-card-description">
+                                Services Done
+                            </div>
+
+                        </div>
+
+                    </article>
+                </div>
+
+            </section>
+
+            <!--LIVE QUEUE CARD-->
+            <div class="dashboard-grid">
+
+                <section class="dashboard-card">
+                    <div class="card-header">
+                        <h2>Live Queue Overview</h2>
+                    </div>
+
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Ticket#</th>
+                                    <th>Client Name</th>
+                                    <th>Service Requested</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!--ROW 1-->
+                                <tr>
+                                    <td>P-001</td>
+                                    <td>Joseph Dionisio</td>
+                                    <td>Barangay Clearance</td>
+                                    <td>Completed</td>
+                                </tr>
+
+                                <!--ROW 2-->
+                                <tr>
+                                    <td>P-002</td>
+                                    <td>Charles Namoc</td>
+                                    <td>Barangay Cedula</td>
+                                    <td>Skipped</td>
+                                </tr>
+
+                                <!--ROW 3-->
+                                <tr>
+                                    <td>R-001</td>
+                                    <td>Jhade Martin</td>
+                                    <td>Certificate of Indigency</td>
+                                    <td>Called</td>
+                                </tr>
+
+                                <!--ROW 4-->
+                                <tr>
+                                    <td>P-003</td>
+                                    <td>John Adrian Mariano</td>
+                                    <td>Certificate of Residency</td>
+                                    <td>Waiting</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="services-volume">
+                    <div class="card-header">
+                        <h2>Services Volume (Today)</h2>
+                    </div>
+
+                    <div class="list-services">
+                        <!--BARANGAY CLEARANCE-->
+                        <article>
+                            <div class="service-info">
+                                <span class="service-title">Barangay Clearance</span>
+                                <span class="service-count">145</span>
+                            </div>
+
+                            <div class="progress-bar" style="height: 6px;">
+                                <div class="progress-fill" style="width: 90%; background-color: #f47b20; border-radius: 1px; height: 100%;">
+                                </div>
+                            </div>
+                        </article>
+
+                        <!--CERTIFICATE OF RESIDENCY-->
+                        <article>
+                            <div class="service-info">
+                                <span class="service-title">Certificate of Residency</span>
+                                <span class="service-count">82</span>
+                            </div>
+
+                            <div class="progress-bar" style="height: 6px;">
+                                <div class="progress-fill" style="width: 65%; background-color: #f47b20; border-radius: 1px; height: 100%;">
+                                </div>
+                            </div>
+                        </article>
+
+                        <!--CEDULA-->
+                        <article>
+                            <div class="service-info">
+                                <span class="service-title">Cedula</span>
+                                <span class="service-count">54</span>
+                            </div>
+
+                            <div class="progress-bar" style="height: 6px;">
+                                <div class="progress-fill" style="width: 40%; background-color: #f47b20; border-radius: 1px; height: 100%;">
+                                </div>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+</body>
+
+</html>

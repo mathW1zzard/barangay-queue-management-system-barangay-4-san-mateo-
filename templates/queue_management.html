@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Queue Management</title>
 </head>
+
 <body>
     <!--SIDEBAR-->
     <aside>
@@ -26,7 +28,7 @@
 
         <!--NAVIGATION-->
         <nav>
-            <a href="/barangay-queue-system-main/templates/dashboard.html">
+            <a href="/templates/dashboard.html">
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -39,7 +41,7 @@
                 </span>
                 <span>Dashboard</span>
             </a>
-            <a href="#">
+            <a href="/templates/client_registration.html">
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -52,7 +54,7 @@
                 </span>
                 <span>Client Registration</span>
             </a>
-            <a href="#">
+            <a href="#" class="active">
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -67,7 +69,7 @@
                 </span>
                 <span>Queue Management</span>
             </a>
-            <a href="#">
+            <a href="/templates/attendance.html">
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -80,7 +82,7 @@
                 </span>
                 <span>Attendance</span>
             </a>
-            <a href="#" class="active">
+            <a href="/templates/services.html">
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -118,14 +120,126 @@
                     </div>
                 </div>
             </header>
-            
+
             <div class="content-container">
-                <div class="client-attendance">
-                    <h2>Services Directory</h2>
-                    <button>Add New Service</button>
-                </div>
+
+                <!--LIVE PANEL-->
+                <section class="live-panel">
+                    <header>
+                        <h2>NOW SERVING</h2>
+                    </header>
+                    <!--NOW SERVING (RIGHT)-->
+                    <div class="now-serving">
+
+                        <div class="serving-info-row">
+                            <div class="serving-number-section">
+                                <p>NOW SERVING</p>
+                                <h2>P-001</h2>
+                                <span class="priority-badge">Priority Lane</span>
+                            </div>
+                            <div class="visitor-info-section">
+                                <p>Current Visitor Name</p>
+                                <h3>Joseph Dionisio</h3>
+                                <p class="service-req">Requested Service: <span>Barangay Clearance</span></p>
+                            </div>
+                        </div>
+
+                        <div class="now-serve-btns">
+                            <button>Call Next</button>
+                            <button>Skip</button>
+                            <button>Recall</button>
+                            <button>Complete</button>
+                            <button>No-Show</button>
+                        </div>
+                    </div>
+
+                    <!--UP NEXT (LEFT)-->
+                    <div class="up-next">
+                        <header>
+                            <h4>UP NEXT</h4>
+                        </header>
+
+                        <div class="waiting-list">
+
+                            <!--LIST INFORMATION-->
+                            <div class="list-info">
+                                <div class="ticket-info">
+                                    <h2>P-002</h2>
+                                    <p>Jhade Martin</p>
+                                </div>
+                                <span>Priority</span>
+                            </div>
+
+                            <div class="list-info">
+                                <div class="ticket-info">
+                                    <h2>R-001</h2>
+                                    <p>Charles Namoc</p>
+                                </div>
+                                <span>Regular</span>
+                            </div>
+
+                            <div class="list-info">
+                                <div class="ticket-info">
+                                    <h2>P-003</h2>
+                                    <p>Katrina Manzanilo</p>
+                                </div>
+                                <span>Priority</span>
+                            </div>
+
+                        </div>
+                    </div>
+                </section>
+
+
+                <!--TABLE CARD-->
+                <section>
+                    <div class="table-tabs">
+                        <button>All Queue (<span></span>)</button>
+                        <button>Waiting (<span></span>)</button>
+                        <button>Called (<span></span>)</button>
+                        <button>Skipped (<span></span>)</button>
+                    </div>
+
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Ticket#</th>
+                                    <th>Visitor Name</th>
+                                    <th>Type</th>
+                                    <th>Service</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>P-001</td>
+                                    <td>Joseph Dionisio</td>
+                                    <td>Priority</td>
+                                    <td>Barangay Clearance</td>
+                                    <td>Called</td>
+                                </tr>
+                                <tr>
+                                    <td>P-002</td>
+                                    <td>Jhade Martin</td>
+                                    <td>Priority</td>
+                                    <td>Barangay Clearance</td>
+                                    <td>Waiting</td>
+                                </tr>
+                                <tr>
+                                    <td>R-001</td>
+                                    <td>Charles Namoc</td>
+                                    <td>Regular</td>
+                                    <td>Barangay Permit</td>
+                                    <td>Waiting</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
             </div>
         </main>
     </aside>
 </body>
+
 </html>

@@ -28,7 +28,7 @@
 
         <!--NAVIGATION-->
         <nav>
-            <a href="/barangay-queue-system-main/templates/dashboard.html">
+            <a href="/templates/dashboard.html">
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -54,7 +54,7 @@
                 </span>
                 <span>Client Registration</span>
             </a>
-            <a href="#">
+            <a href="/templates/queue_management.html">
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -69,7 +69,7 @@
                 </span>
                 <span>Queue Management</span>
             </a>
-            <a href="#">
+            <a href="/templates/attendance.html">
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -82,7 +82,7 @@
                 </span>
                 <span>Attendance</span>
             </a>
-            <a href="#">
+            <a href="/templates/services.html">
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -150,18 +150,53 @@
                             <label for="">Lane / Client Classification</label>
 
                             <div class="lane">
-                                <input type="text" name="priority" id="priority">
-                                <label for="priority"></label>
+                                <input type="radio" name="lane" id="priority" value="Priority">
+                                <label for="priority">Priority</label>
                             </div>
 
                             <div class="lane">
-                                <input type="text" name="regular" id="regular">
-                                <label for="regular"></label>
+                                <input type="radio" name="lane" id="regular" value="Regular">
+                                <label for="regular">Regular</label>
                             </div>
                         </div>
 
                         <button type="submit">Generate and Print Ticket Stub</button>
                     </form>
+                </div>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Ticket Number</th>
+                                <th>Visitor Name</th>
+                                <th>Service Category</th>
+                                <th>Time Dispensed</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>P-001</td>
+                                <td>Joseph Dionisio</td>
+                                <td>Cedula</td>
+                                <td>10:30 am</td>
+                            </tr>
+
+                            <tr>
+                                <td>P-002</td>
+                                <td>Jhade Martin</td>
+                                <td>Barangay Clearance</td>
+                                <td>12:30 pm</td>
+                            </tr>
+
+                            <tr>
+                                <td>R-001</td>
+                                <td>Charles Namoc</td>
+                                <td>Business Permit</td>
+                                <td>1:30 pm</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </main>

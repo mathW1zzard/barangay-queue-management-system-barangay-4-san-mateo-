@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Services</title>
 </head>
+
 <body>
     <!--SIDEBAR-->
     <aside>
@@ -26,7 +28,7 @@
 
         <!--NAVIGATION-->
         <nav>
-            <a href="/barangay-queue-system-main/templates/dashboard.html">
+            <a href="/templates/dashboard.html">
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -39,7 +41,7 @@
                 </span>
                 <span>Dashboard</span>
             </a>
-            <a href="#">
+            <a href="/templates/client_registration.html">
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -52,7 +54,7 @@
                 </span>
                 <span>Client Registration</span>
             </a>
-            <a href="#">
+            <a href="/templates/queue_management.html">
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -118,14 +120,52 @@
                     </div>
                 </div>
             </header>
-            
+
             <div class="content-container">
-                <div class="client-attendance">
+                <div class="services-directory">
                     <h2>Services Directory</h2>
-                    <button>Add New Service</button>
+                    <button type="submit">Add New Service</button>
+                </div>
+
+                <div class="current-services">
+                    <section>
+                        <div class="card-header">
+                            <h2>Current Offred Services</h2>
+                        </div>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Service Name</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Barangay Clearance</td>
+                                        <td>Active</td>
+                                        <td></td>
+                                    </tr>
+
+                                    <tr>
+                                        <td>Business Permit</td>
+                                        <td>Active</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Cedula</td>
+                                        <td>Inactive</td>
+                                        <td></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
                 </div>
             </div>
         </main>
     </aside>
 </body>
+
 </html>

@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Attendance</title>
 </head>
+
 <body>
     <!--SIDEBAR-->
     <aside>
@@ -26,7 +28,7 @@
 
         <!--NAVIGATION-->
         <nav>
-            <a href="/barangay-queue-system-main/templates/dashboard.html">
+            <a href="/templates/dashboard.html">
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -39,7 +41,7 @@
                 </span>
                 <span>Dashboard</span>
             </a>
-            <a href="#">
+            <a href="/templates/client_registration.html">
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -52,7 +54,7 @@
                 </span>
                 <span>Client Registration</span>
             </a>
-            <a href="#">
+            <a href="/templates/queue_management.html">
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -80,7 +82,7 @@
                 </span>
                 <span>Attendance</span>
             </a>
-            <a href="#">
+            <a href="/templates/services.html">
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -118,13 +120,124 @@
                     </div>
                 </div>
             </header>
-            
+
             <div class="content-container">
-                <div class="client-attendance">
-                    <h2>Client Attendance</h2>
-                    <button>Print Attendance</button>
-                </div>
+                <section class="client-attendance">
+                    <div class="content-header-row">
+                        <h2>Client Attendance</h2>
+                        <button>Print Attendance</button>
+                    </div>
+
+                    <!--FILTER CONTAINER-->
+                    <div class="filter-container">
+                        <!--DATE RANGE-->
+                        <div class="filter-group">
+                            <label for="date">Date Range:</label>
+                            <input type="date" name="date" id="date">
+                        </div>
+
+                        <!--CLLIENT TYPE-->
+                        <div class="filter-group">
+                            <label for="client-type">Client Type:</label>
+                            <select name="client-type" id="client-type">
+                                <option value="All Lanes">All Lanes</option>
+                                <option value="Priority">Priority</option>
+                                <option value="Regular">Regular</option>
+                            </select>
+                        </div>
+
+                        <!--REQUESTED SERVICES-->
+                        <div class="filter-group">
+                            <label for="services">Requested Services:</label>
+                            <select name="services" id="services">
+                                <option value="All Services">All Lanes</option>
+                                <option value="Barangay Clearance">Barangay Clearance</option>
+                                <option value="Barangay Permit">Barangay Permit</option>
+                                <option value="Cedula">Cedula</option>
+                            </select>
+                        </div>
+
+                        <!--SEARCH -->
+                        <div class="filter-group">
+                            <label for="search-client">Client Type:</label>
+                            <input type="search" name="search-client" id="search-client"
+                                placeholder="Type name or ticket...">
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Ticket#</th>
+                                    <th>Client Name</th>
+                                    <th>Type</th>
+                                    <th>Service</th>
+                                    <th>Time in</th>
+                                    <th>Time out</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>10/24/2025</td>
+                                    <td>P-001</td>
+                                    <td>Joseph Dionisio</td>
+                                    <td>Priority</td>
+                                    <td>Barangay Clearance</td>
+                                    <td>10:43 am</td>
+                                    <td>10:50 am</td>
+                                    <td>Completed</td>
+                                </tr>
+                                <tr>
+                                    <td>10/24/2025</td>
+                                    <td>P-001</td>
+                                    <td>Joseph Dionisio</td>
+                                    <td>Priority</td>
+                                    <td>Barangay Clearance</td>
+                                    <td>10:43 am</td>
+                                    <td>10:50 am</td>
+                                    <td>Completed</td>
+                                </tr>
+                                <tr>
+                                    <td>10/24/2025</td>
+                                    <td>P-001</td>
+                                    <td>Joseph Dionisio</td>
+                                    <td>Priority</td>
+                                    <td>Barangay Clearance</td>
+                                    <td>10:43 am</td>
+                                    <td>10:50 am</td>
+                                    <td>Completed</td>
+                                </tr>
+                                <tr>
+                                    <td>10/24/2025</td>
+                                    <td>P-001</td>
+                                    <td>Joseph Dionisio</td>
+                                    <td>Priority</td>
+                                    <td>Barangay Clearance</td>
+                                    <td>10:43 am</td>
+                                    <td>--</td>
+                                    <td>No Show</td>
+                                </tr>
+                                <tr>
+                                    <td>10/24/2025</td>
+                                    <td>P-001</td>
+                                    <td>Joseph Dionisio</td>
+                                    <td>Priority</td>
+                                    <td>Barangay Clearance</td>
+                                    <td>10:43 am</td>
+                                    <td>--</td>
+                                    <td>Called</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
             </div>
         </main>
 </body>
+
 </html>

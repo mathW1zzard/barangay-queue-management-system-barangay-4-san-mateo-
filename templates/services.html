@@ -124,13 +124,14 @@
             <div class="content-container">
                 <div class="services-directory">
                     <h2>Services Directory</h2>
-                    <button type="submit">Add New Service</button>
+                    <button type="button" class="open-btn"
+                        onclick="document.getElementById('add-modal').showModal()">Add New Service</button>
                 </div>
 
                 <div class="current-services">
                     <section>
                         <div class="card-header">
-                            <h2>Current Offred Services</h2>
+                            <h2>Current Offered Services</h2>
                         </div>
                         <div class="table-container">
                             <table>
@@ -141,31 +142,123 @@
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
+
+                                {% for service in services %}
                                 <tbody>
                                     <tr>
-                                        <td>Barangay Clearance</td>
-                                        <td>Active</td>
-                                        <td></td>
-                                    </tr>
-
-                                    <tr>
-                                        <td>Business Permit</td>
-                                        <td>Active</td>
-                                        <td></td>
-                                    </tr>
-                                    <tr>
-                                        <td>Cedula</td>
-                                        <td>Inactive</td>
-                                        <td></td>
+                                        <td>{{ service.service_name }}</td>
+                                        <td>{{ service.service_status }}</td>
+                                        <td>
+                                            <button type="button"
+                                                onclick="document.getElementById('edit-modal-{{ service.id }}').showModal()">
+                                                Edit</button>
+                                            <button type="button" 
+                                                onclick="document.getElementById('delete-modal-{{ service.id }}').showModal()">
+                                                Delete</button>
+                                        </td>
                                     </tr>
                                 </tbody>
+                                {% else %}
+                                <tbody>
+                                    <tr>
+                                        <td>N/A</td>
+                                        <td>N/A</td>
+                                        <td>
+                                            N/A
+                                        </td>
+                                    </tr>
+                                </tbody>
+                                {% endfor %}
                             </table>
                         </div>
                     </section>
                 </div>
+
+                <!-- ADD SERVICE -->
+                <dialog class="modal" id="add-modal">
+                    <form action="/services/add" method="post">
+                        <h2>Add New Service</h2>
+                        <p class="sub">Define a new service window for the Barangay queue — this determines what
+                            residents
+                            can
+                            line up for.</p>
+                        <hr>
+                        <div class="field">
+                            <label>Service Name</label>
+                            <input type="text" name="service_name" placeholder="e.g. Cedula / Community Tax Certificate"
+                                required>
+                        </div>
+                        <div class="field">
+                            <label>Status</label>
+                            <select name="service_status" id="service_status">
+                                <option value="Active">Active</option>
+                                <option value="Inactive">Inactive</option>
+                            </select>
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn btn-cancel" type="button"
+                                onclick="document.getElementById('add-modal').close()">Cancel</button>
+                            <button class="btn btn-save" type="submit">Add Service</button>
+                        </div>
+                    </form>
+                </dialog>
+
+                <!-- EDIT SERVICE -->
+                {% for service in services %}
+                <dialog class="modal" id="edit-modal-{{ service.id }}">
+                    <form action="/services/edit/{{ service.id }}" method="post">
+                        <h2>Edit Service</h2>
+                        <p class="sub">Update the details of an existing service. Changes apply to new queue tickets
+                            immediately.</p>
+                        <hr>
+                        <div class="field">
+                            <label>Service Name</label>
+                            <input type="text" name="service_name" value="{{ service.service_name}}">
+                        </div>
+                        <div class="field">
+                            <label>Status</label>
+                            <select name="service_status" id="service_status">
+                                <option value="Active" {% if service.service_status=="Active" %}selected{% endif %}>
+                                    Active
+                                </option>
+                                <option value="Inactive" {% if service.service_status=="Inactive" %}selected{% endif %}>
+                                    Inactive
+                                </option>
+                            </select>
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn btn-cancel" type="button"
+                                onclick="document.getElementById('edit-modal-{{ service.id }}').close()">Cancel</button>
+                            <button class="btn btn-save" type="submit">Save Changes</button>
+                        </div>
+                    </form>
+                </dialog>
+                {% endfor %}
+
+                <!-- DELETE SERVICE -->
+                {% for service in services %}
+                <dialog class="modal" id="delete-modal-{{ service.id }}">
+                    <form action="/services/delete/{{ service.id }}" method="post">
+                        <h2>Delete Service?</h2>
+                        <p class="sub">This will permanently remove <strong>{{ service.service_name }}</strong> from the queue system.</p>
+                        <hr>
+                        <div class="warning-box">
+                            ⚠ This action cannot be undone. Any pending tickets for this service will remain in history,
+                            but
+                            residents will no longer be able to queue for it.
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn btn-cancel" type="button"  onclick="document.getElementById('delete-modal-{{ service.id }}').close()">Cancel</button>
+                            <button class="btn btn-delete" type="submit">Delete Service</button>
+                        </div>
+                    </form>
+                </dialog>
+                {% endfor %}
             </div>
         </main>
     </aside>
+
+    <script src="/static/modal.js"></script>
 </body>
 
 </html>

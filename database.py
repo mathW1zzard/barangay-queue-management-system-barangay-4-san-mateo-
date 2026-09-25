@@ -17,6 +17,7 @@ class Service(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     service_name = Column(String)
+    service_status = Column(String)
 
     tickets = relationship("Ticket", back_populates="service")
     
@@ -63,3 +64,5 @@ class Admin(Base):
     username = Column(String, unique=True)
     password_hash = Column(String)
     recovery_key_hash = Column(String, nullable=True)
+    
+Base.metadata.create_all(bind=engine)

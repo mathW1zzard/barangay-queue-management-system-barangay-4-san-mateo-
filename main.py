@@ -1,12 +1,17 @@
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi import Request
+from fastapi.staticfiles import StaticFiles
+from fastapi import Request 
 from fastapi import Form
-from enum import Enum
 from fastapi.responses import RedirectResponse
-from database import SessionLocal, Service, Ticket, Visit, Admin
+from database import SessionLocal, Ticket, Service, Visit, Admin
 from datetime import datetime, date
+from starlette.middleware.sessions import SessionMiddleware
+from enum import Enum
+import secrets
+import string
+import bcrypt
+
 
 # For authentication(recovery key)
 import secrets
@@ -35,20 +40,58 @@ def read_root():
 
 @app.get("/dashboard")
 def show_dislay(request: Request):
+    db = SessionLocal()
+    today_start = datetime.combine(date.today(), datetime.min.time())
+        
+    total_today = db.query(Ticket).filter(Ticket.created_at >= today_start).count()
     response =  templates.TemplateResponse(request, "dashboard.html", {
-        
+        "total_today": total_today
     })
     return response
 
 
-@app.get("/client-registration")
-def show_dislay(request: Request):
+@app.get("/client_registration")
+def show_registration(request: Request):
+    db = SessionLocal()
+    tickets = db.query(Ticket).all()
+    services = db.query(Service).all()
+    
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    
+    total_today = db.query(Ticket).filter(Ticket.created_at >= today_start).count()
+    
     response =  templates.TemplateResponse(request, "client_registration.html", {
-        
+        "tickets": tickets,
+        "services": services,
+        "total_today": total_today
     })
+    db.close
     return response
 
-@app.get("/queue-management")
+@app.post("/register")
+def register_ticket(citizen_name: str =  Form(...), lane: str = Form(...), service_id: int = Form(...)):
+    db = SessionLocal()
+    count = db.query(Ticket).count()
+    service = db.query(Service).all()
+    
+    today_start = datetime.combine(date.today(), datetime.min.time()) # start at 00:00:00 for today
+    
+    count_today = db.query(Ticket).filter(
+        Ticket.lane == lane,
+        Ticket.created_at >= today_start
+    ).count()
+    
+    
+    new_ticket_number = f"{lane}-{count_today + 1:03d}"
+
+    new_ticket = Ticket(citizen_name=citizen_name, lane=lane, service_id=service_id, ticket_number=new_ticket_number)
+    db.add(new_ticket)
+    db.commit()
+    db.close()
+    
+    return RedirectResponse(url="/client_registration", status_code=303)
+
+@app.get("/queue_management")
 def show_dislay(request: Request):
     response =  templates.TemplateResponse(request, "queue_management.html", {
         

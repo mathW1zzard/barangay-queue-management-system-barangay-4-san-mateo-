@@ -41,7 +41,7 @@
                 </span>
                 <span>Dashboard</span>
             </a>
-            <a href="/client-registration">
+            <a href="/client_registration">
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -54,7 +54,7 @@
                 </span>
                 <span>Client Registration</span>
             </a>
-            <a href="/queue-management">
+            <a href="/queue_management">
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -112,7 +112,7 @@
 
                 <div class="header-right">
                     <div class="active-queue">
-                        <p>Active Queue: <span>12</span></p>
+                        <p>Active Queue: <span>{{ total_today }}</span></p>
                     </div>
 
                     <div class="profile">
@@ -128,21 +128,23 @@
                 </div>
 
                 <div class="ticket-register-form">
-                    <form action="" method="post">
+                    <form action="/register" method="post">
 
                         <!--CLIENT FULL NAME-->
-                        <div class="form-">
+                        <div class="form-group">
                             <label for="name">Client Full Name</label>
-                            <input type="text" name="name" id="name">
+                            <input type="text" name="citizen_name" id="citizen_name">
                         </div>
 
                         <!--SELECT SERVICE-->
-                        <div class="label-input-register">
+                        <div class="form-group">
                             <label for="service">Select Requested Services</label>
-                            <select name="service" id="service">
-                                <option value="barangay-clearance">Barangay Clearance</option>
-                                <option value="barangay-clearance">Certificate of Indigency</option>
-                                <option value="barangay-clearance">Cedula</option>
+                            <select name="service_id">
+                                {% for service in services %}
+                                {% if service.service_status == "Active" %}
+                                <option value="{{ service.id }}">{{ service.service_name }}</option>
+                                {% endif %}
+                                {% endfor %}
                             </select>
                         </div>
 
@@ -150,21 +152,49 @@
                             <label for="">Lane / Client Classification</label>
 
                             <div class="lane">
-                                <input type="radio" name="lane" id="priority" value="Priority">
+                                <input type="radio" name="lane" id="priority" value="P">
                                 <label for="priority">Priority</label>
                             </div>
 
                             <div class="lane">
-                                <input type="radio" name="lane" id="regular" value="Regular">
+                                <input type="radio" name="lane" id="regular" value="R">
                                 <label for="regular">Regular</label>
                             </div>
                         </div>
 
                         <button type="submit">Generate and Print Ticket Stub</button>
+
+                        <dialog id="ticketDialog">
+                            <div class="ticket-slip">
+                                <p class="ticket-org">BARANGAY SAN JOSE</p>
+                                <p class="ticket-sub">Official Queue Slip</p>
+                                <hr>
+                                <h1 id="ticketNumber">P-000</h1>
+                                <span id="laneTag" class="lane-tag">PRIORITY LANE</span>
+                                <hr>
+                                <div class="ticket-detail-row">
+                                    <span>Client Name:</span><strong id="ticketClientName"></strong>
+                                </div>
+                                <div class="ticket-detail-row">
+                                    <span>Service:</span><strong id="ticketServiceName"></strong>
+                                </div>
+                                <div class="ticket-detail-row">
+                                    <span>Date &amp; Time:</span><span id="ticketDateTime"></span>
+                                </div>
+                                <hr>
+                                <p class="ticket-note">Please wait for your number to be called. Thank you!</p>
+                            </div>
+
+                            <button id="printBtn" class="btn-primary">🖨 Print Ticket Slip</button>
+                            <button id="registerAnotherBtn" class="btn-secondary">Register Another Client</button>
+                        </dialog>
                     </form>
                 </div>
 
                 <div class="table-container">
+                    <div class="card-header">
+                        <h2>My Dispensed Today (Today's History)</h2>
+                    </div>
                     <table>
                         <thead>
                             <tr>
@@ -174,28 +204,27 @@
                                 <th>Time Dispensed</th>
                             </tr>
                         </thead>
+
+                        {% for ticket in tickets %}
                         <tbody>
                             <tr>
-                                <td>P-001</td>
-                                <td>Joseph Dionisio</td>
-                                <td>Cedula</td>
-                                <td>10:30 am</td>
-                            </tr>
-
-                            <tr>
-                                <td>P-002</td>
-                                <td>Jhade Martin</td>
-                                <td>Barangay Clearance</td>
-                                <td>12:30 pm</td>
-                            </tr>
-
-                            <tr>
-                                <td>R-001</td>
-                                <td>Charles Namoc</td>
-                                <td>Business Permit</td>
-                                <td>1:30 pm</td>
+                                <td>{{ ticket.ticket_number }}</td>
+                                <td>{{ ticket.citizen_name }}</td>
+                                <td>{{ ticket.service.service_name }}</td>
+                                <td>{{ ticket.created_at.strftime('%I:%M %p')}}</td> <!--<-I wanted to join the time-->
                             </tr>
                         </tbody>
+                        {% else %}
+                        <tbody>
+                            <tr>
+                                <td>N/A</td>
+                                <td>N/A</td>
+                                <td>N/A</td>
+                                <td>N/A</td>
+                                <td>N/A</td>
+                            </tr>
+                        </tbody>
+                        {% endfor %}
                     </table>
                 </div>
             </div>

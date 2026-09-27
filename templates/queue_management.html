@@ -112,7 +112,7 @@
 
                 <div class="header-right">
                     <div class="active-queue">
-                        <p>Active Queue: <span>12</span></p>
+                        <p>Active Queue: <span>{{ total_today }}</span></p>
                     </div>
 
                     <div class="profile">
@@ -125,79 +125,96 @@
 
                 <!--LIVE PANEL-->
                 <section class="live-panel">
-                    <header>
-                        <h2>NOW SERVING</h2>
-                    </header>
                     <!--NOW SERVING (RIGHT)-->
                     <div class="now-serving">
-
+                        {% if current_ticket %}
                         <div class="serving-info-row">
                             <div class="serving-number-section">
                                 <p>NOW SERVING</p>
-                                <h2>P-001</h2>
-                                <span class="priority-badge">Priority Lane</span>
+                                <h2>{{ current_ticket.ticket_number }}</h2>
+
+                                <span class="priority-badge">{% if current_ticket.lane == "P" %}Priority{% else
+                                    %}Regular{%
+                                    endif %} Lane</span>
                             </div>
                             <div class="visitor-info-section">
                                 <p>Current Visitor Name</p>
-                                <h3>Joseph Dionisio</h3>
-                                <p class="service-req">Requested Service: <span>Barangay Clearance</span></p>
+                                <h3>{{ current_ticket.citizen_name }}</h3>
+                                <p class="service-req">Requested Service: <span>{{ current_ticket.service.service_name
+                                        }}</span>
+                                </p>
                             </div>
                         </div>
+                        {% else %}
+                        <div class="serving-info-row">
+                            <p>No visitor currently being served.</p>
+                        </div>
+                        {% endif %}
 
                         <div class="now-serve-btns">
-                            <button>Call Next</button>
-                            <button>Skip</button>
-                            <button>Recall</button>
-                            <button>Complete</button>
-                            <button>No-Show</button>
+                            <form action="/call-next" method="post">
+                                <button type="submit" id="call-next" {% if current_ticket %}disabled{% endif %}>Call
+                                    Next</button>
+                            </form>
+
+                            {% if current_ticket %}
+                            {% if current_ticket.status == "called" %}
+                            <form action="/complete/{{ current_ticket.id }}" method="post" style="display:inline">
+                                <button type="submit">Complete</button>
+                            </form>
+                            <form action="/skip/{{ current_ticket.id }}" method="post" style="display:inline">
+                                <button type="submit">Skip</button>
+                            </form>
+                            <form action="/no-show/{{ current_ticket.id }}" method="post" style="display:inline">
+                                <button type="submit">No-Show</button>
+                            </form>
+                            {% elif current_ticket.status == "skipped" %}
+                            <form action="/recall/{{ current_ticket.id }}" method="post" style="display:inline">
+                                <button type="submit">Recall</button>
+                            </form>
+                            <form action="/no-show/{{ current_ticket.id }}" method="post" style="display:inline">
+                                <button type="submit">No-Show</button>
+                            </form>
+                            {% endif %}
+                            {% endif %}
                         </div>
+
                     </div>
 
                     <!--UP NEXT (LEFT)-->
                     <div class="up-next">
-                        <header>
-                            <h4>UP NEXT</h4>
-                        </header>
-
+                        <h4>UP NEXT</h4>
+                        {% for ticket in upcomming %}
                         <div class="waiting-list">
-
                             <!--LIST INFORMATION-->
                             <div class="list-info">
                                 <div class="ticket-info">
-                                    <h2>P-002</h2>
-                                    <p>Jhade Martin</p>
+                                    <h4>{{ ticket.ticket_number }}</h4>
+                                    <p>{{ ticket.citizen_name }}</p>
                                 </div>
-                                <span>Priority</span>
-                            </div>
-
-                            <div class="list-info">
-                                <div class="ticket-info">
-                                    <h2>R-001</h2>
-                                    <p>Charles Namoc</p>
-                                </div>
-                                <span>Regular</span>
-                            </div>
-
-                            <div class="list-info">
-                                <div class="ticket-info">
-                                    <h2>P-003</h2>
-                                    <p>Katrina Manzanilo</p>
-                                </div>
-                                <span>Priority</span>
+                                <span>{% if ticket.lane == "P" %}Priority{% else %}Regular{% endif %}</span>
                             </div>
 
                         </div>
+                        {% else %}
+                        <div class="default-list">
+                            <h3>No on waiting</h3>
+                        </div>
+                        {% endfor %}
                     </div>
                 </section>
-
 
                 <!--TABLE CARD-->
                 <section>
                     <div class="table-tabs">
-                        <button>All Queue (<span></span>)</button>
-                        <button>Waiting (<span></span>)</button>
-                        <button>Called (<span></span>)</button>
-                        <button>Skipped (<span></span>)</button>
+                        <button type="button" class="tab-btn active" data-status="all">Active Queue (<span>{{ all_active
+                                }}</span>)</button>
+                        <button type="button" class="tab-btn" data-status="waiting">Waiting (<span>{{ waiting_count
+                                }}</span>)</button>
+                        <button type="button" class="tab-btn" data-status="called">Called (<span>{{ called_count
+                                }}</span>)</button>
+                        <button type="button" class="tab-btn" data-status="skipped">Skipped (<span>{{ skipped_count
+                                }}</span>)</button>
                     </div>
 
                     <div class="table-container">
@@ -211,35 +228,47 @@
                                     <th>Status</th>
                                 </tr>
                             </thead>
+                            {% for ticket in tickets %}
                             <tbody>
-                                <tr>
-                                    <td>P-001</td>
-                                    <td>Joseph Dionisio</td>
-                                    <td>Priority</td>
-                                    <td>Barangay Clearance</td>
-                                    <td>Called</td>
-                                </tr>
-                                <tr>
-                                    <td>P-002</td>
-                                    <td>Jhade Martin</td>
-                                    <td>Priority</td>
-                                    <td>Barangay Clearance</td>
-                                    <td>Waiting</td>
-                                </tr>
-                                <tr>
-                                    <td>R-001</td>
-                                    <td>Charles Namoc</td>
-                                    <td>Regular</td>
-                                    <td>Barangay Permit</td>
-                                    <td>Waiting</td>
+                                <tr class="ticket-row" data-status="{{ ticket.status }}">
+                                    <td>{{ ticket.ticket_number }}</td>
+                                    <td>{{ ticket.citizen_name }}</td>
+                                    <td>{% if ticket.lane == "P" %}Priority{% else %}Regular{% endif %}</td>
+                                    <td>{{ ticket.service.service_name }}</td>
+                                    <td>{{ ticket.status }}</td>
                                 </tr>
                             </tbody>
+                            {% else %}
+                            <tbody>
+                                <tr>
+                                    <td>N/A</td>
+                                    <td>N/A</td>
+                                    <td>N/A</td>
+                                    <td>N/A</td>
+                                    <td>N/A</td>
+                                </tr>
+                            </tbody>
+                            {% endfor %}
                         </table>
                     </div>
                 </section>
             </div>
         </main>
     </aside>
+
+    <script>
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const status = btn.dataset.status;
+                document.querySelectorAll('.ticket-row').forEach(row => {
+                    row.parentElement.style.display =
+                        (status === 'all' || row.dataset.status === status) ? '' : 'none';
+                });
+            });
+        });
+    </script>
 </body>
 
 </html>

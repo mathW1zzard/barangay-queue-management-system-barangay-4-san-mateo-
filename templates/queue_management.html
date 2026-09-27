@@ -5,6 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Queue Management</title>
+    <style>
+        .status {
+            text-transform: capitalize;
+        }
+    </style>
 </head>
 
 <body>
@@ -235,7 +240,8 @@
                                     <td>{{ ticket.citizen_name }}</td>
                                     <td>{% if ticket.lane == "P" %}Priority{% else %}Regular{% endif %}</td>
                                     <td>{{ ticket.service.service_name }}</td>
-                                    <td>{{ ticket.status }}</td>
+                                    <td class="status status-{{ ticket.status }}">{{ ticket.status.replace('_', ' ') }}
+                                    </td>
                                 </tr>
                             </tbody>
                             {% else %}

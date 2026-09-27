@@ -5,7 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard</title>
-
+    <style>
+        .status {
+            text-transform: capitalize;
+        }
+    </style>
 </head>
 
 <body>
@@ -142,7 +146,9 @@
                                 <path d="M3 9h18" />
                             </svg>
                         </span>
-                        <p>Today: <span>October 24, 2026</span></p>
+                        <p>Today:
+                            <span><input type="date"></span>
+                        </p>
                     </div>
                 </div>
 
@@ -171,7 +177,7 @@
 
                             </div>
                             <div class="stat-card-number">
-                                356
+                                <span>{{ total_count }}</span>
                             </div>
 
 
@@ -193,7 +199,7 @@
 
                             </div>
                             <div class="stat-card-number">
-                                342
+                                <span>{{ waiting_count }}</span>
                             </div>
 
 
@@ -215,7 +221,7 @@
 
                             </div>
                             <div class="stat-card-number">
-                                318
+                                <span>{{ completed_count }}</span>
                             </div>
 
                         </div>
@@ -236,7 +242,7 @@
 
                             </div>
                             <div class="stat-card-number">
-                                318
+                                <span>{{ no_show_count }}</span>
                             </div>
 
                         </div>
@@ -264,37 +270,14 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <!--ROW 1-->
+                                {% for ticket in tickets %}
                                 <tr>
-                                    <td>P-001</td>
-                                    <td>Joseph Dionisio</td>
-                                    <td>Barangay Clearance</td>
-                                    <td>Completed</td>
+                                    <td>{{ ticket.citizen_name }}</td>
+                                    <td>{{ ticket.service.service_name }}</td>
+                                    <td class="status status-{{ ticket.status }}">{{ ticket.status.replace('_', ' ') }}
+                                    </td>
                                 </tr>
-
-                                <!--ROW 2-->
-                                <tr>
-                                    <td>P-002</td>
-                                    <td>Charles Namoc</td>
-                                    <td>Barangay Cedula</td>
-                                    <td>Skipped</td>
-                                </tr>
-
-                                <!--ROW 3-->
-                                <tr>
-                                    <td>R-001</td>
-                                    <td>Jhade Martin</td>
-                                    <td>Certificate of Indigency</td>
-                                    <td>Called</td>
-                                </tr>
-
-                                <!--ROW 4-->
-                                <tr>
-                                    <td>P-003</td>
-                                    <td>John Adrian Mariano</td>
-                                    <td>Certificate of Residency</td>
-                                    <td>Waiting</td>
-                                </tr>
+                                {% endfor %}
                             </tbody>
                         </table>
                     </div>

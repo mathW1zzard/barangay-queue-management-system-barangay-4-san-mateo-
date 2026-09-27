@@ -9,6 +9,7 @@ from datetime import datetime, date
 from starlette.middleware.sessions import SessionMiddleware
 from enum import Enum
 from fastapi import WebSocket, WebSocketDisconnect
+from sqlalchemy import desc
 import secrets
 import string
 import bcrypt
@@ -42,11 +43,46 @@ def read_root():
 @app.get("/dashboard")
 def show_dislay(request: Request):
     db = SessionLocal()
+    tickets = db.query(Ticket).all()
+    services = db.query(Service).all()
+    
     today_start = datetime.combine(date.today(), datetime.min.time())
         
+    active_tickets = db.query(Ticket).filter(Ticket.created_at >= today_start).count()
+    today_count = db.query(Ticket).filter(Ticket.status, Ticket.created_at >= today_start).count()
+    
+    #called_count = db.query(Ticket).filter(Ticket.status == "called", Ticket.created_at >= today_start).count()
+    
+    visits_today = db.query(Visit).filter(Visit.created_at >= today_start).count()
+    
+    overview = []
+    for t in active_tickets:
+        overview.append({
+            "ticket_number": t.ticket_number,
+            "citizen_name": t.citizen_name,
+            "service_name": t.service.service_name,
+            "status": t.status,
+            "sort_time": t.called_at or t.created_at,
+        })
+    for v in visits_today:
+        overview.append({
+            "ticket_number": v.ticket_number,
+            "citizen_name": v.citizen_name,
+            "service_name": v.service.service_name,
+            "status": v.final_status,
+            "sort_time": v.completed_at or v.created_at,
+        })
+        
+    overview.sort(key=lambda row: ["sort-time"], reverse=True)
+    
     total_today = db.query(Ticket).filter(Ticket.created_at >= today_start).count()
     response =  templates.TemplateResponse(request, "dashboard.html", {
-        "total_today": total_today
+        "overview": overview,
+        "total_today": total_today,
+        "today_count": today_count,
+        "active_tickets": active_tickets,
+        "tickets": tickets,
+        "services": services
     })
     db.close()
     return response
@@ -94,7 +130,7 @@ def register_ticket(citizen_name: str =  Form(...), lane: str = Form(...), servi
 
 # QUEUE MANAGEMENT
 @app.get("/queue_management")
-def show_dislay(request: Request):
+def show_display(request: Request):
     db = SessionLocal()
     tickets = db.query(Ticket).all()
     services = db.query(Service).all()
@@ -168,7 +204,7 @@ def call_next():
         db.commit()
     
     db.close()
-    return RedirectResponse(url=f"/display?announce={announce}", status_code=303)
+    return RedirectResponse(url=f"/queue_management?announce={announce}", status_code=303)
 
 def archive_ticket(ticket_id : int, final_status : str):
     """Shared helper: mark a ticket finished and create its permanent Visit record."""
@@ -256,7 +292,7 @@ def recall_ticket(ticket_id: int):
 
 @app.post("/complete/{ticket_id}")
 def complete_ticket(ticket_id: int):
-    archive_ticket(ticket_id, "Completed")
+    archive_ticket(ticket_id, "completed")
     db = SessionLocal()
     
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
@@ -270,7 +306,7 @@ def complete_ticket(ticket_id: int):
 
 @app.post("/no-show/{ticket_id}")
 def no_show_ticket(ticket_id: int):
-    archive_ticket(ticket_id, "No Show")   # reuses your existing archive helper - permanent
+    archive_ticket(ticket_id, "no_show")   # reuses your existing archive helper - permanent
     db = SessionLocal()
         
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()

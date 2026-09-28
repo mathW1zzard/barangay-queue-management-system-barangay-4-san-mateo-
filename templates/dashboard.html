@@ -9,6 +9,13 @@
         .status {
             text-transform: capitalize;
         }
+
+        .progress-fill {
+            width: var(--w);
+            background-color: #f47b20;
+            border-radius: 1px;
+            height: 100%;
+        }
     </style>
 </head>
 
@@ -297,47 +304,18 @@
                     </div>
 
                     <div class="list-services">
-                        <!--BARANGAY CLEARANCE-->
+                        {% for s in service_volume %}
                         <article>
                             <div class="service-info">
-                                <span class="service-title">Barangay Clearance</span>
-                                <span class="service-count">145</span>
+                                <span class="service-title">{{ s.name }}</span>
+                                <span class="service-count">{{ s.count }}</span>
                             </div>
 
                             <div class="progress-bar" style="height: 6px;">
-                                <div class="progress-fill"
-                                    style="width: 90%; background-color: #f47b20; border-radius: 1px; height: 100%;">
-                                </div>
+                                <div class="progress-fill" style="--w: {{ s.percent }}%;"></div>
                             </div>
                         </article>
-
-                        <!--CERTIFICATE OF RESIDENCY-->
-                        <article>
-                            <div class="service-info">
-                                <span class="service-title">Certificate of Residency</span>
-                                <span class="service-count">82</span>
-                            </div>
-
-                            <div class="progress-bar" style="height: 6px;">
-                                <div class="progress-fill"
-                                    style="width: 65%; background-color: #f47b20; border-radius: 1px; height: 100%;">
-                                </div>
-                            </div>
-                        </article>
-
-                        <!--CEDULA-->
-                        <article>
-                            <div class="service-info">
-                                <span class="service-title">Cedula</span>
-                                <span class="service-count">54</span>
-                            </div>
-
-                            <div class="progress-bar" style="height: 6px;">
-                                <div class="progress-fill"
-                                    style="width: 40%; background-color: #f47b20; border-radius: 1px; height: 100%;">
-                                </div>
-                            </div>
-                        </article>
+                        {% endfor %}
                     </div>
                 </section>
             </div>

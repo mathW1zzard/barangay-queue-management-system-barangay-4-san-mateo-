@@ -9,6 +9,7 @@ from datetime import datetime, date
 from starlette.middleware.sessions import SessionMiddleware
 from enum import Enum
 from fastapi import WebSocket, WebSocketDisconnect
+from collections import Counter
 from sqlalchemy import desc
 import secrets
 import string
@@ -65,6 +66,22 @@ def show_dashboard(request: Request):
     active_tickets = db.query(Ticket).filter(Ticket.created_at >= today_start).all()
     visits_today = db.query(Visit).filter(Visit.created_at >= today_start).all()
     
+    service_counter = Counter()
+    for t in active_tickets:
+        service_counter[t.service_id] += 1
+    for v in visits_today:
+        service_counter[v.service_id] += 1
+
+    service_volume = [
+        {"name": s.service_name, "count": service_counter.get(s.id, 0)}
+        for s in services
+    ]
+    service_volume.sort(key=lambda row: row["count"], reverse=True)
+
+    max_count = max((row["count"] for row in service_volume), default=0)
+    for row in service_volume:
+        row["percent"] = round(row["count"] / max_count * 100) if max_count else 0
+        
     # Stat cards
     waiting_count = db.query(Ticket).filter(
         Ticket.status == "waiting", Ticket.created_at >= today_start
@@ -99,6 +116,7 @@ def show_dashboard(request: Request):
             "sort_time": v.completed_at or v.created_at,
         })
         
+    
     overview.sort(key=lambda row: row["sort_time"], reverse=True)
     overview = overview[:10]
 
@@ -109,7 +127,8 @@ def show_dashboard(request: Request):
         "completed_count": completed_count,
         "no_show_count": no_show_count,
         "tickets": tickets,
-        "services": services
+        "services": services,
+        "service_volume": service_volume
     })
     db.close()
     return response

@@ -119,7 +119,7 @@
 
             <div class="header-right">
                 <div class="active-queue">
-                    <p>Active Queue: <span>{{ total_today }}</span></p>
+                    <p>Active Queue: <span>{{ active_queue_today() }}</span></p>
                 </div>
 
                 <div class="profile">
@@ -270,12 +270,20 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for ticket in tickets %}
+                                {% for row in overview %}
                                 <tr>
-                                    <td>{{ ticket.citizen_name }}</td>
-                                    <td>{{ ticket.service.service_name }}</td>
-                                    <td class="status status-{{ ticket.status }}">{{ ticket.status.replace('_', ' ') }}
+                                    <td>{{ row.ticket_number }}</td>
+                                    <td>{{ row.citizen_name }}</td>
+                                    <td>{{ row.service_name }}</td>
+                                    <td>
+                                        <span class="badge badge-{{ row.status }}">
+                                            {{ row.status.replace('_', ' ') | title }}
+                                        </span>
                                     </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="4">No activity yet today.</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

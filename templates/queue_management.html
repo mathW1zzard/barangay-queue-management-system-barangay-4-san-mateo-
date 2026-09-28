@@ -117,7 +117,7 @@
 
                 <div class="header-right">
                     <div class="active-queue">
-                        <p>Active Queue: <span>{{ total_today }}</span></p>
+                        <p>Active Queue: <span>{{ active_queue_today() }}</span></p>
                     </div>
 
                     <div class="profile">
@@ -163,7 +163,6 @@
                             </form>
 
                             {% if current_ticket %}
-                            {% if current_ticket.status == "called" %}
                             <form action="/complete/{{ current_ticket.id }}" method="post" style="display:inline">
                                 <button type="submit">Complete</button>
                             </form>
@@ -173,14 +172,6 @@
                             <form action="/no-show/{{ current_ticket.id }}" method="post" style="display:inline">
                                 <button type="submit">No-Show</button>
                             </form>
-                            {% elif current_ticket.status == "skipped" %}
-                            <form action="/recall/{{ current_ticket.id }}" method="post" style="display:inline">
-                                <button type="submit">Recall</button>
-                            </form>
-                            <form action="/no-show/{{ current_ticket.id }}" method="post" style="display:inline">
-                                <button type="submit">No-Show</button>
-                            </form>
-                            {% endif %}
                             {% endif %}
                         </div>
 
@@ -231,6 +222,7 @@
                                     <th>Type</th>
                                     <th>Service</th>
                                     <th>Status</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             {% for ticket in tickets %}
@@ -242,17 +234,20 @@
                                     <td>{{ ticket.service.service_name }}</td>
                                     <td class="status status-{{ ticket.status }}">{{ ticket.status.replace('_', ' ') }}
                                     </td>
+                                    <td>{% if ticket.status == "skipped" %}
+                                        <form action="/recall/{{ ticket.id }}" method="post" style="display:inline">
+                                            <button type="submit">Recall</button>
+                                        </form>
+                                        <form action="/no-show/{{ ticket.id }}" method="post" style="display:inline">
+                                            <button type="submit">No-Show</button>
+                                        </form>
+                                        {% endif %}
+                                    </td>
                                 </tr>
                             </tbody>
                             {% else %}
                             <tbody>
-                                <tr>
-                                    <td>N/A</td>
-                                    <td>N/A</td>
-                                    <td>N/A</td>
-                                    <td>N/A</td>
-                                    <td>N/A</td>
-                                </tr>
+                                <tr><td colspan="6">N/A</td></tr>
                             </tbody>
                             {% endfor %}
                         </table>
@@ -275,6 +270,8 @@
             });
         });
     </script>
+
+    
 </body>
 
 </html>

@@ -23,6 +23,20 @@ app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 priority_streak = 0
 
+def active_queue_today():
+    """Tickets registered today that are still in the queue."""
+    db = SessionLocal()
+    
+    try:
+        today_start = datetime.combine(date.today(), datetime.min.time())
+        return db.query(Ticket).filter(
+            Ticket.created_at >= today_start,
+            Ticket.status.in_(["waiting", "called", "skipped"]),
+        ).count()
+    finally:
+        db.close()
+        
+templates.env.globals["active_queue_today"] = active_queue_today
 class StatusEnum(str, Enum):
     ACTIVE = "Active"
     INACTIVE = "Inactive"
@@ -41,19 +55,31 @@ def read_root():
 
 
 @app.get("/dashboard")
-def show_dislay(request: Request):
+def show_dashboard(request: Request):
     db = SessionLocal()
     tickets = db.query(Ticket).all()
     services = db.query(Service).all()
     
     today_start = datetime.combine(date.today(), datetime.min.time())
-        
-    active_tickets = db.query(Ticket).filter(Ticket.created_at >= today_start).count()
-    today_count = db.query(Ticket).filter(Ticket.status, Ticket.created_at >= today_start).count()
     
-    #called_count = db.query(Ticket).filter(Ticket.status == "called", Ticket.created_at >= today_start).count()
+    active_tickets = db.query(Ticket).filter(Ticket.created_at >= today_start).all()
+    visits_today = db.query(Visit).filter(Visit.created_at >= today_start).all()
     
-    visits_today = db.query(Visit).filter(Visit.created_at >= today_start).count()
+    # Stat cards
+    waiting_count = db.query(Ticket).filter(
+        Ticket.status == "waiting", Ticket.created_at >= today_start
+    ).count()
+
+    completed_count = db.query(Visit).filter(
+        Visit.final_status == "completed", Visit.created_at >= today_start
+    ).count()
+
+    no_show_count = db.query(Visit).filter(
+        Visit.final_status == "no_show", Visit.created_at >= today_start
+    ).count()
+
+    # Issued today = still active + already archived
+    total_count = len(active_tickets) + len(visits_today)
     
     overview = []
     for t in active_tickets:
@@ -73,20 +99,20 @@ def show_dislay(request: Request):
             "sort_time": v.completed_at or v.created_at,
         })
         
-    overview.sort(key=lambda row: ["sort-time"], reverse=True)
-    
-    total_today = db.query(Ticket).filter(Ticket.created_at >= today_start).count()
+    overview.sort(key=lambda row: row["sort_time"], reverse=True)
+    overview = overview[:10]
+
     response =  templates.TemplateResponse(request, "dashboard.html", {
         "overview": overview,
-        "total_today": total_today,
-        "today_count": today_count,
-        "active_tickets": active_tickets,
+        "total_count": total_count,
+        "waiting_count": waiting_count,
+        "completed_count": completed_count,
+        "no_show_count": no_show_count,
         "tickets": tickets,
         "services": services
     })
     db.close()
     return response
-
 
 @app.get("/client_registration")
 def show_registration(request: Request):
@@ -112,13 +138,11 @@ def register_ticket(citizen_name: str =  Form(...), lane: str = Form(...), servi
     
     today_start = datetime.combine(date.today(), datetime.min.time()) # start at 00:00:00 for today
     
-    count_today = db.query(Ticket).filter(
-        Ticket.lane == lane,
-        Ticket.created_at >= today_start
-    ).count()
+    active_today = db.query(Ticket).filter(Ticket.lane == lane, Ticket.created_at >= today_start).count()
+    archive_today = db.query(Visit).filter(Visit.lane == lane, Visit.created_at >= today_start).count()
     
     
-    new_ticket_number = f"{lane}-{count_today + 1:03d}"
+    new_ticket_number = f"{lane}-{active_today + archive_today + 1:03d}"
 
     new_ticket = Ticket(citizen_name=citizen_name, lane=lane, service_id=service_id, ticket_number=new_ticket_number, created_at=datetime.now())
     db.add(new_ticket)
@@ -130,21 +154,22 @@ def register_ticket(citizen_name: str =  Form(...), lane: str = Form(...), servi
 
 # QUEUE MANAGEMENT
 @app.get("/queue_management")
-def show_display(request: Request):
+def show_display(request: Request, announce: str = ""):
     db = SessionLocal()
     tickets = db.query(Ticket).all()
     services = db.query(Service).all()
     upcomming = get_incoming_order(limit=3)
+    active_statuses = ["waiting", "called", "skipped"]
+    
+    today_start = datetime.combine(date.today(), datetime.min.time())
     
     current_ticket = db.query(Ticket).filter(Ticket.status == "called") \
         .order_by(Ticket.called_at.desc()).first()
 
-    all_active = db.query(Ticket).filter(Ticket.status.in_(["waiting", "called", "skipped"])).count()
-    waiting_count = db.query(Ticket).filter(Ticket.status == "waiting").count()
-    called_count = db.query(Ticket).filter(Ticket.status == "called").count()
-    skipped_count = db.query(Ticket).filter(Ticket.status == "skipped").count()
-    
-    today_start = datetime.combine(date.today(), datetime.min.time())
+    all_active = db.query(Ticket).filter(Ticket.status.in_(active_statuses), Ticket.created_at >= today_start).count()
+    waiting_count = db.query(Ticket).filter(Ticket.status == "waiting", Ticket.created_at >= today_start).count()
+    called_count = db.query(Ticket).filter(Ticket.status == "called", Ticket.created_at >= today_start).count()
+    skipped_count = db.query(Ticket).filter(Ticket.status == "skipped", Ticket.created_at >= today_start).count()
             
     total_today = db.query(Ticket).filter(Ticket.created_at >= today_start).count()
     response =  templates.TemplateResponse(request, "queue_management.html", {
@@ -157,6 +182,7 @@ def show_display(request: Request):
         "called_count": called_count,
         "skipped_count": skipped_count,
         "current_ticket": current_ticket,
+        "announce": announce,
         "upcomming": upcomming
     })
     db.close()
@@ -168,42 +194,31 @@ def show_display(request: Request):
 def call_next():
     global priority_streak
     db = SessionLocal()
-    
-    # Don't allow calling a new ticket while one is already being served
-    already_serving = db.query(Ticket).filter(Ticket.status == "called").first()
-    if already_serving:
-        db.close()
-        return RedirectResponse(url="/queue_management", status_code=303)
-    
-    # Prority: Regular ratio
-    if priority_streak < 2:
-        # Try call a priority(P) ticket first
-        next_ticket = db.query(Ticket).filter(Ticket.status == "waiting", Ticket.lane == "P").first()
-        
-        if next_ticket:
+    try:
+        # Don't allow calling a new ticket while one is already being served
+        if db.query(Ticket).filter(Ticket.status == "called").first():
+            return RedirectResponse(url="/queue_management", status_code=303)
+
+        # Same logic as the "Up Next" preview, so they can never disagree
+        upcoming = get_incoming_order(limit=1)
+        if not upcoming:
+            return RedirectResponse(url="/queue_management", status_code=303)
+
+        next_ticket = db.query(Ticket).filter(Ticket.id == upcoming[0].id).first()
+
+        # Update the streak the same way the preview does
+        if next_ticket.lane == "P":
             priority_streak += 1
         else:
-            # No priority tickets waiting, fall back to regular
-            next_ticket = db.query(Ticket).filter(Ticket.status == "waiting", Ticket.lane == "R").first()
             priority_streak = 0
-    
-    else:
-        # Regular's turn
-        next_ticket = db.query(Ticket).filter(Ticket.status == "waiting", Ticket.lane == "R").first()
-        priority_streak = 0
-        
-        if not next_ticket:
-            # No regular tickets waiting, fall back to priority
-            next_ticket = db.query(Ticket).filter(Ticket.status == "waiting", Ticket.lane == "P").first()
-        
-    announce = ""
-    if next_ticket:
+
         next_ticket.status = "called"
         next_ticket.called_at = datetime.now()
         announce = next_ticket.ticket_number
         db.commit()
-    
-    db.close()
+    finally:
+        db.close()
+
     return RedirectResponse(url=f"/queue_management?announce={announce}", status_code=303)
 
 def archive_ticket(ticket_id : int, final_status : str):
@@ -280,6 +295,11 @@ def skip_ticket(ticket_id: int):
 @app.post("/recall/{ticket_id}")
 def recall_ticket(ticket_id: int):
     db = SessionLocal()
+    
+    if db.query(Ticket).filter(Ticket.status == "called").first():
+        db.close()
+        return RedirectResponse(url="/queue_management", status_code=303)
+    
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
     announce = ""
     if ticket:

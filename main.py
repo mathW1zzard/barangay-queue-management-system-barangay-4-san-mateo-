@@ -5,7 +5,7 @@ from fastapi import Request
 from fastapi import Form
 from fastapi.responses import RedirectResponse
 from database import SessionLocal, Ticket, Service, Visit, Admin
-from datetime import datetime, date
+from datetime import datetime, date, time
 from starlette.middleware.sessions import SessionMiddleware
 from enum import Enum
 from fastapi import WebSocket, WebSocketDisconnect
@@ -16,6 +16,7 @@ import secrets
 import string
 import bcrypt
 import asyncio
+import math
 
 # For authentication(recovery key)
 import secrets
@@ -29,6 +30,7 @@ priority_streak = 0
 
 PRINT_FIRST_SHEET_ROWS = 14
 PRINT_NEXT_SHEET_ROWS = 22
+PAGE_SIZE = 15
 
 def parse_date(value: str):
     try:
@@ -338,7 +340,7 @@ def register_ticket(citizen_name: str =  Form(...), lane: str = Form(...), servi
 
 # QUEUE MANAGEMENT
 @app.get("/queue_management")
-def show_display(request: Request, announce: str = ""):
+def show_queue(request: Request, announce: str = ""):
     db = SessionLocal()
     tickets = db.query(Ticket).all()
     services = db.query(Service).all()
@@ -523,33 +525,148 @@ def no_show_ticket(ticket_id: int):
 
 
 @app.get("/attendance")
-def show_dislay(request: Request):
+def show_attendance(
+    request: Request,
+    date: str = "",
+    lane: str = "",
+    service_id: str = "",
+    q: str = "",
+    page: int = 1,
+):  
+    service_id_int = int(service_id) if service_id else None
     db = SessionLocal()
-    today_start = datetime.combine(date.today(), datetime.min.time())
-                
-    total_today = db.query(Ticket).filter(Ticket.created_at >= today_start).count()
-    response =  templates.TemplateResponse(request, "attendance.html", {
-        
-        "total_today": total_today
-    })
-    db.close()
+    try:
+        # Single day filter - defaults to today when `date` is empty.
+        # (resolve_date_range takes a from/to pair; passing `date` for both
+        # gives one day, exactly like the print route's single-day case.)
+        d_from, d_to = resolve_date_range(date, date)
+
+        base = apply_visit_filters(db.query(Visit), d_from, d_to, lane, service_id_int, q)
+
+        total_records = base.count()                                   # count BEFORE offset/limit
+        total_pages = max(1, math.ceil(total_records / PAGE_SIZE))
+        page = max(1, min(page, total_pages))                           # clamp a stale ?page= from the URL
+
+        visits = (
+            base.order_by(Visit.created_at.desc())
+            .offset((page - 1) * PAGE_SIZE)
+            .limit(PAGE_SIZE)
+            .all()
+        )
+
+        start_record = (page - 1) * PAGE_SIZE + 1 if total_records else 0
+        end_record = min(page * PAGE_SIZE, total_records)
+
+        services = db.query(Service).all()
+
+        response = templates.TemplateResponse(request, "attendance.html", {
+            "visits": visits,
+            "services": services,
+            "date": d_from.isoformat(),     # feeds <input type="date" value="...">, always a real date
+            "lane": lane,
+            "service_id": service_id_int,
+            "search": q,
+            "page": page,
+            "total_pages": total_pages,
+            "total_records": total_records,
+            "start_record": start_record,
+            "end_record": end_record,
+        })
+    finally:
+        db.close()
     return response
 
-def apply_visit_filters(query, date_from, date_to, lane, service_id, q):
+def resolve_date_range(date_from: str, date_to: str):
+    """
+    The date filter always has a value - there is no "all dates".
+    - nothing given         -> today
+    - only date_from given  -> that single day
+    - both given            -> that range (swapped if entered backwards)
+    """
+    d_from = parse_date(date_from) or date.today()
+    d_to = parse_date(date_to) or d_from
+    if d_to < d_from:
+        d_from, d_to = d_to, d_from
+    return d_from, d_to
+
+def range_label(d_from, d_to):
+    fmt = lambda d: d.strftime("%b %d, %Y")
+    if d_from == d_to:
+        return fmt(d_from)                     # e.g. "Oct 24, 2026"
+    return f"{fmt(d_from)} to {fmt(d_to)}"     # e.g. "Oct 24, 2026 to Oct 30, 2026"
+
+def apply_visit_filters(query, d_from, d_to, lane, service_id, q):
     """Use this in BOTH /attendance and /attendance/print so they never disagree."""
-    if date_from:
-        query = query.filter(Visit.date >= date_from)
-    if date_to:
-        query = query.filter(Visit.date >= date_to)
+    start_dt = datetime.combine(d_from, time.min)   # d_from 00:00:00.000000
+    end_dt = datetime.combine(d_to, time.max)        # d_to   23:59:59.999999
+    query = query.filter(Visit.created_at >= start_dt, Visit.created_at <= end_dt)
+
     if lane:
         query = query.filter(Visit.lane == lane)
     if service_id:
         query = query.filter(Visit.service_id == service_id)
     if q:
         like = f"%{q}%"
-        query = query.filter(Visit.ticket_number.ilike(like) | Visit.citizen_name(like)) 
+        query = query.filter(
+            Visit.ticket_number.ilike(like) | Visit.citizen_name.ilike(like)
+        )
     return query
 
+
+@app.get("/attendance/print")
+def attendance_print(request: Request, date_from: str = "", date_to: str = "", lane: str = "", service_id: str = "", q: str = ""):
+    service_id_int = int(service_id) if service_id else None
+    
+    db = SessionLocal()
+    
+    try:
+        d_from, d_to = resolve_date_range(date_from, date_to)
+        
+        base = apply_visit_filters(db.query(Visit), d_from, d_to, lane, service_id_int, q)
+        
+        completed = base.filter(Visit.final_status == "completed").count()
+        no_show = base.filter(Visit.final_status == "no_show").count()
+        stats = {
+            "issued": completed + no_show,
+            "completed": completed,
+            "no_show": no_show
+        }
+        
+        rows = base.order_by(Visit.created_at).all()
+        
+        sheets = [{"rows": rows[:PRINT_FIRST_SHEET_ROWS], "start": 1}]
+        rest = rows[PRINT_FIRST_SHEET_ROWS:]
+        for i in range(0, len(rest), PRINT_NEXT_SHEET_ROWS):
+            sheets.append({
+                "rows": rest[i:i + PRINT_NEXT_SHEET_ROWS],
+                "start": PRINT_FIRST_SHEET_ROWS + i + 1,
+            })
+
+        # Human-readable filter summary for the toolbar
+        service = db.get(Service, service_id_int) if service_id_int else None
+        
+        parts = [
+            range_label(d_from, d_to),
+            lane.title() if lane else "All Types",
+            service.name if service else "All Services",
+        ]
+        if q:
+            parts.append(f'Search: "{q}"')
+            
+        return templates.TemplateResponse(request,"print_attendance.html", {
+            "sheets": sheets,
+            "stats": stats,
+            "total_rows": len(rows),
+            "filters_text": ", ".join(parts),
+            "range_text": range_label(d_from, d_to),
+            "barangay_name": "Barangay 4, San Mateo, Isabela",
+            "generated_at": datetime.now().strftime("%m/%d/%Y %I:%M %p"),
+        },
+    )
+    finally:
+        db.close()
+        
+        
 # SERVICE
 @app.get("/services")
 def list_services(request: Request):

@@ -125,24 +125,26 @@
                 <section class="client-attendance">
                     <div class="content-header-row">
                         <h2>Client Attendance</h2>
-                        <button>Print Attendance</button>
+                        <a class="btn-print" target="_blank" rel="noopener"
+                            href="/attendance/print?date_from={{ date }}&date_to={{ date }}&client_type={{ client_type }}&service_id={{ service_id or '' }}&q={{ search }}">Print
+                            Attendance</a>
                     </div>
 
                     <!--FILTER CONTAINER-->
-                    <div class="filter-container">
+                    <form id="filter-form" method="get" action="/attendance" class="filter-container">
                         <!--DATE RANGE-->
                         <div class="filter-group">
                             <label for="date">Date Range:</label>
-                            <input type="date" name="date" id="date">
+                            <input type="date" name="date" id="date" value="{{ date }}">
                         </div>
 
                         <!--CLLIENT TYPE-->
                         <div class="filter-group">
                             <label for="client-type">Client Type:</label>
-                            <select name="client-type" id="client-type">
-                                <option value="All Lanes">All Lanes</option>
-                                <option value="Priority">Priority</option>
-                                <option value="Regular">Regular</option>
+                            <select name="lane" id="client-type">
+                                <option value="" {{ "selected" if not lane }}>All Types</option>
+                            <option value="P" {{ "selected" if lane=="P" }}>Priority</option>
+                            <option value="R" {{ "selected" if lane=="R" }}>Regular</option>
                             </select>
                         </div>
 
@@ -150,20 +152,23 @@
                         <div class="filter-group">
                             <label for="services">Requested Services:</label>
                             <select name="services" id="services">
-                                <option value="All Services">All Lanes</option>
-                                <option value="Barangay Clearance">Barangay Clearance</option>
-                                <option value="Barangay Permit">Barangay Permit</option>
-                                <option value="Cedula">Cedula</option>
+                                <option value="">All Lanes</option>
+                                {% for service in services %}
+                                <option value="{{ service.id }}" {{ "selected" if service_id==service.id }}>
+                                    {{ service.service_name }}
+                                </option>
+                                {% endfor %}
                             </select>
                         </div>
 
                         <!--SEARCH -->
                         <div class="filter-group">
                             <label for="search-client">Client Type:</label>
-                            <input type="search" name="search-client" id="search-client"
-                                placeholder="Type name or ticket...">
+                            <input type="search" name="q" id="search-client" placeholder="Type name or ticket..."
+                                value="{{ search }}">
                         </div>
-                    </div>
+
+                    </form>
                 </section>
 
                 <section>
@@ -182,59 +187,54 @@
                                 </tr>
                             </thead>
                             <tbody>
+                                {% for v in visits %}
                                 <tr>
-                                    <td>10/24/2025</td>
-                                    <td>P-001</td>
-                                    <td>Joseph Dionisio</td>
-                                    <td>Priority</td>
-                                    <td>Barangay Clearance</td>
-                                    <td>10:43 am</td>
-                                    <td>10:50 am</td>
-                                    <td>Completed</td>
+                                    <td>{{ v.created_at.strftime('%m/%d/%Y') }}</td>
+                                    <td>{{ v.ticket_number }}</td>
+                                    <td>{{ v.citizen_name }}</td>
+                                    <td>{% if v.lane == "P" %}Priority{% else %}Regular{% endif %}</td>
+                                    <td>{{ v.service.service_name }}</td>
+                                    <td>{{ v.called_at.strftime('%I:%M %p') if v.called_at else '--' }}</td>
+                                    <td>{{ v.completed_at.strftime('%I:%M %p') if v.completed_at else '--' }}</td>
+                                    <td class="status status-{{ v.final_status }}">
+                                        {{ "No Show" if v.final_status == "no_show" else "Completed" }}
+                                    </td>
                                 </tr>
+                                {% else %}
                                 <tr>
-                                    <td>10/24/2025</td>
-                                    <td>P-001</td>
-                                    <td>Joseph Dionisio</td>
-                                    <td>Priority</td>
-                                    <td>Barangay Clearance</td>
-                                    <td>10:43 am</td>
-                                    <td>10:50 am</td>
-                                    <td>Completed</td>
+                                    <td colspan="8" class="empty-row">No records match these filters.</td>
                                 </tr>
-                                <tr>
-                                    <td>10/24/2025</td>
-                                    <td>P-001</td>
-                                    <td>Joseph Dionisio</td>
-                                    <td>Priority</td>
-                                    <td>Barangay Clearance</td>
-                                    <td>10:43 am</td>
-                                    <td>10:50 am</td>
-                                    <td>Completed</td>
-                                </tr>
-                                <tr>
-                                    <td>10/24/2025</td>
-                                    <td>P-001</td>
-                                    <td>Joseph Dionisio</td>
-                                    <td>Priority</td>
-                                    <td>Barangay Clearance</td>
-                                    <td>10:43 am</td>
-                                    <td>--</td>
-                                    <td>No Show</td>
-                                </tr>
-                                <tr>
-                                    <td>10/24/2025</td>
-                                    <td>P-001</td>
-                                    <td>Joseph Dionisio</td>
-                                    <td>Priority</td>
-                                    <td>Barangay Clearance</td>
-                                    <td>10:43 am</td>
-                                    <td>--</td>
-                                    <td>Called</td>
-                                </tr>
+                                {% endfor %}
                             </tbody>
                         </table>
-                    </div>
+
+                        <div class="pagination-row">
+                            <p class="record-count">
+                                {% if total_records > 0 %}
+                                Showing {{ start_record }} to {{ end_record }} of {{ total_records }} records
+                                {% else %}
+                                No records
+                                {% endif %}
+                            </p>
+
+                            <div class="pagination">
+                                {% set qs = "date=" + date + "&lane=" + lane + "&service_id=" +
+                                (service_id|string if service_id else "") + "&q=" + search %}
+
+                                <a class="page-btn {{ 'disabled' if page <= 1 }}"
+                                    href="/attendance?{{ qs }}&page={{ page - 1 if page > 1 else 1 }}">Previous</a>
+
+                                {% for p in range(1, total_pages + 1) %}
+                                <a class="page-btn {{ 'active' if p == page }}"
+                                    href="/attendance?{{ qs }}&page={{ p }}">
+                                    {{ p }}
+                                </a>
+                                {% endfor %}
+
+                                <a class="page-btn {{ 'disabled' if page >= total_pages }}"
+                                    href="/attendance?{{ qs }}&page={{ page + 1 if page < total_pages else total_pages }}">Next</a>
+                            </div>
+                        </div>
                 </section>
             </div>
         </main>

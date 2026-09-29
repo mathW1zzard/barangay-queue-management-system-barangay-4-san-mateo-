@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Attendance Report</title>
+
+    <!-- @page size is set by the paper dropdown (JS below) -->
+    <style id="page-style">
+        @page {
+            size: 8.5in 11in;
+            margin: 12mm;
+        }
+    </style>
+
+    <style>
+        :root {
+            --navy: #1b2a4a;
+            --orange: #e87722;
+            --muted: #6b7690;
+            --line: #dfe3ec;
+            --green: #16a34a;
+            --sheet-w: 8.5in;
+            --sheet-h: 11in;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        /* System fonts only: the app runs offline, so no CDN fonts. */
+        body {
+            margin: 0;
+            background: #e6e8ec;
+            color: var(--navy);
+            font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+            font-size: 12px;
+        }
+
+        /* ---------- Toolbar (screen only) ---------- */
+        .toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            background: #fff;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 14px;
+            padding: 10px 20px;
+        }
+
+        .pager {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+
+        .pager button,
+        .toolbar select {
+            border: 1px solid var(--line);
+            background: #fff;
+            color: var(--navy);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font: inherit;
+            cursor: pointer;
+        }
+
+        .pager button:disabled {
+            opacity: .4;
+            cursor: default;
+        }
+
+        .filters-text {
+            color: var(--muted);
+            flex: 1;
+            min-width: 160px;
+        }
+
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-print {
+            background: var(--orange);
+            color: #fff;
+            border: 0;
+            border-radius: 6px;
+            padding: 8px 18px;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .btn-print:focus-visible,
+        .pager button:focus-visible,
+        .toolbar select:focus-visible {
+            outline: 2px solid var(--navy);
+            outline-offset: 2px;
+        }
+
+        /* ---------- Sheets ---------- */
+        .stage {
+            padding: 24px 0 48px;
+        }
+
+        .sheet {
+            display: none;
+            position: relative;
+            width: var(--sheet-w);
+            min-height: var(--sheet-h);
+            margin: 0 auto;
+            background: #fff;
+            padding: 40px 44px 56px;
+            box-shadow: 0 2px 14px rgba(27, 42, 74, .18);
+        }
+
+        .sheet.active {
+            display: block;
+        }
+
+        .rpt-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--navy);
+        }
+
+        .rpt-head .country {
+            color: var(--orange);
+            font-size: 10px;
+            font-weight: 700;
+        }
+
+        .rpt-head h1 {
+            margin: 2px 0 0;
+            font-size: 20px;
+        }
+
+        .rpt-head .meta {
+            text-align: right;
+            color: var(--muted);
+            font-size: 10.5px;
+            line-height: 1.5;
+        }
+
+        .rpt-head .meta strong {
+            color: var(--navy);
+            font-size: 15px;
+        }
+
+        /* 3 summary cards (sheet 1 only) */
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin: 18px 0;
+        }
+
+        .card {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 10px 14px;
+            background: #f8f9fc;
+        }
+
+        .card .label {
+            color: var(--muted);
+            font-size: 10.5px;
+        }
+
+        .card .value {
+            font-size: 24px;
+            font-weight: 800;
+            margin-top: 2px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 14px;
+        }
+
+        th {
+            text-align: left;
+            font-size: 10.5px;
+            padding: 7px 6px;
+            border-bottom: 2px solid var(--navy);
+        }
+
+        td {
+            padding: 8px 6px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        td.muted {
+            color: var(--muted);
+        }
+
+        .st-completed {
+            color: var(--green);
+            font-weight: 700;
+        }
+
+        .st-no_show {
+            color: var(--orange);
+            font-weight: 700;
+        }
+
+        tr {
+            break-inside: avoid;
+        }
+
+        .empty {
+            text-align: center;
+            color: var(--muted);
+            padding: 28px 0;
+        }
+
+        .signatures {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 56px;
+        }
+
+        .sign {
+            min-width: 200px;
+        }
+
+        .sign .role {
+            color: var(--muted);
+            font-size: 10.5px;
+            margin-bottom: 30px;
+        }
+
+        .sign .name {
+            display: inline-block;
+            border-bottom: 1px solid var(--navy);
+            font-weight: 700;
+            padding-bottom: 2px;
+            min-width: 200px;
+        }
+
+        .sign .title {
+            color: var(--muted);
+            font-size: 10.5px;
+            margin-top: 3px;
+        }
+
+        .page-foot {
+            position: absolute;
+            left: 44px;
+            right: 44px;
+            bottom: 22px;
+            display: flex;
+            justify-content: space-between;
+            color: var(--muted);
+            font-size: 10px;
+        }
+
+        /* ---------- Print ---------- */
+        @media print {
+            body {
+                background: #fff;
+            }
+
+            .toolbar {
+                display: none;
+            }
+
+            /* the whole bar never hits the paper */
+            .stage {
+                padding: 0;
+            }
+
+            .sheet {
+                width: auto;
+                min-height: 0;
+                margin: 0;
+                padding: 0 0 24px;
+                box-shadow: none;
+                break-after: page;
+                page-break-after: always;
+            }
+
+            .sheet:last-child {
+                break-after: auto;
+                page-break-after: auto;
+            }
+
+            .page-foot {
+                position: static;
+                margin-top: 16px;
+            }
+
+            /* which sheets print is controlled by body[data-scope] */
+            body[data-scope="all"] .sheet {
+                display: block;
+            }
+
+            body[data-scope="current"] .sheet:not(.active) {
+                display: none;
+            }
+
+            body[data-scope="current"] .sheet.active {
+                break-after: auto;
+                page-break-after: auto;
+            }
+
+            * {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+
+<body data-scope="all">
+
+    <!-- ================= Toolbar ================= -->
+    <div class="toolbar">
+        <div class="pager">
+            <button type="button" id="prev" aria-label="Previous page">&lsaquo;</button>
+            <span id="page-label">Page 1 of {{ sheets|length }}</span>
+            <button type="button" id="next" aria-label="Next page">&rsaquo;</button>
+        </div>
+
+        <div class="filters-text">{{ filters_text }} ({{ total_rows }} record{{ '' if total_rows == 1 else 's' }})</div>
+
+        <div class="controls">
+            <label>Paper
+                <select id="paper">
+                    <option value="short">Short (8.5 x 11)</option>
+                    <option value="a4">A4</option>
+                    <option value="long">Long (8.5 x 13)</option>
+                </select>
+            </label>
+            <label>Print
+                <select id="scope">
+                    <option value="all">All pages</option>
+                    <option value="current">This page only</option>
+                </select>
+            </label>
+            <button type="button" class="btn-print" onclick="window.print()">Print</button>
+        </div>
+    </div>
+
+    <!-- ================= Sheets ================= -->
+    <div class="stage">
+        {% for sheet in sheets %}
+        <section class="sheet{{ ' active' if loop.first }}">
+
+            <header class="rpt-head">
+                <div>
+                    <div class="country">REPUBLIC OF THE PHILIPPINES</div>
+                    <h1>{{ barangay_name|upper }} OFFICE</h1>
+                </div>
+                <div class="meta">
+                    <strong>ATTENDANCE REPORT</strong><br>
+                    Date range: {{ range_text }}<br>
+                    Generated: {{ generated_at }}
+                </div>
+            </header>
+
+            {% if loop.first %}
+            <div class="cards">
+                <div class="card">
+                    <div class="label">TOTAL ISSUED TICKETS</div>
+                    <div class="value">{{ stats.issued }}</div>
+                </div>
+                <div class="card">
+                    <div class="label">COMPLETED</div>
+                    <div class="value">{{ stats.completed }}</div>
+                </div>
+                <div class="card">
+                    <div class="label">NO-SHOW</div>
+                    <div class="value">{{ stats.no_show }}</div>
+                </div>
+            </div>
+            {% endif %}
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>No.</th>
+                        <th>Ticket#</th>
+                        <th>Client Name</th>
+                        <th>Type</th>
+                        <th>Service</th>
+                        <th>Time In</th>
+                        <th>Time Out</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for v in sheet.rows %}
+                    <tr>
+                        <td class="muted">{{ sheet.start + loop.index0 }}</td>
+                        <td><strong>{{ v.ticket_number }}</strong></td>
+                        <td><strong>{{ v.citizen_name }}</strong></td>
+                        <td class="muted">{% if v.lane == "P" %}Priority{% else %}Regular{% endif %}</td>
+                        <td class="muted">{{ v.service.service_name }}</td>
+                        <td class="muted">{{ v.called_at.strftime('%I:%M %p') if v.called_at else '--' }}</td>
+                        <td class="muted">{{ v.completed_at.strftime('%I:%M %p') if v.completed_at else '--' }}</td>
+                        <td class="st-{{ v.final_status }}">{{ 'No-Show' if v.final_status == 'no_show' else 'Completed'
+                            }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="empty">No records match these filters.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            {% if loop.last %}
+            <div class="signatures">
+                <div class="sign">
+                    <div class="role">Prepared by:</div>
+                    <div class="name">&nbsp;</div>
+                    <div class="title">Barangay Secretary</div>
+                </div>
+                <div class="sign">
+                    <div class="role">Noted by:</div>
+                    <div class="name">&nbsp;</div>
+                    <div class="title">Barangay Captain</div>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="page-foot">
+                <span>{{ barangay_name }} Queue &amp; Attendance System</span>
+                <span>Page {{ loop.index }} of {{ sheets|length }}</span>
+            </div>
+        </section>
+        {% endfor %}
+    </div>
+
+    <script>
+        const sheets = [...document.querySelectorAll('.sheet')];
+        const prev = document.getElementById('prev');
+        const next = document.getElementById('next');
+        const label = document.getElementById('page-label');
+        const scope = document.getElementById('scope');
+        const paper = document.getElementById('paper');
+        let cur = 0;
+
+        function show(i) {
+            cur = Math.max(0, Math.min(i, sheets.length - 1));
+            sheets.forEach((s, k) => s.classList.toggle('active', k === cur));
+            label.textContent = `Page ${cur + 1} of ${sheets.length}`;
+            prev.disabled = cur === 0;
+            next.disabled = cur === sheets.length - 1;
+        }
+        prev.onclick = () => show(cur - 1);
+        next.onclick = () => show(cur + 1);
+
+        // Print scope (also applies if the user presses Ctrl+P instead of the button)
+        scope.onchange = () => { document.body.dataset.scope = scope.value; };
+
+        // Paper size -> @page rule + on-screen sheet size
+        const PAPER = { short: ['8.5in', '11in'], a4: ['210mm', '297mm'], long: ['8.5in', '13in'] };
+        function setPaper(key) {
+            const [w, h] = PAPER[key] || PAPER.short;
+            document.getElementById('page-style').textContent = `@page { size: ${w} ${h}; margin: 12mm; }`;
+            document.documentElement.style.setProperty('--sheet-w', w);
+            document.documentElement.style.setProperty('--sheet-h', h);
+            paper.value = key in PAPER ? key : 'short';
+            try { localStorage.setItem('attendancePaper', paper.value); } catch (e) { }
+        }
+        paper.onchange = () => setPaper(paper.value);
+
+        let saved = 'short';
+        try { saved = localStorage.getItem('attendancePaper') || 'short'; } catch (e) { }
+        setPaper(saved);
+        show(0);
+    </script>
+</body>
+
+</html>

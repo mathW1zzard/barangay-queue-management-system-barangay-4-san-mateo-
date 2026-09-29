@@ -271,7 +271,25 @@
         });
     </script>
 
-    
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const justAnnounced = urlParams.get("announce");
+
+        const socket = new WebSocket("ws://" + window.location.host + "/ws/display");
+
+        socket.onmessage = function (event) {
+            if (justAnnounced) {
+                location.reload();
+            }
+        };
+    </script>
+
+    {% if announce %}
+    <script>
+        const msg = new SpeechSynthesisUtterance("Ticket {{ announce }}, please proceed to the counter.");
+        window.speechSynthesis.speak(msg);
+    </script>
+    {% endif %}
 </body>
 
 </html>

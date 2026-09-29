@@ -3,9 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Step 2 - First Time Setup</title>
+    
 </head>
 <body>
-    
+    <h3 style="color: darkorange;">FIRST-TIME SETUP • STEP 2 OF 2</h3>
+    <h1>Save your recovery key</h1>
+    <p>This key is the only way back in if the Administrator account is ever locked out.
+        It will not be shown again - write it down and keep it with the Barangay Captain.</p>
+
+    <h2 style="letter-spacing: 2px; background: #eee; padding: 10px; display: inline-block;">
+        {{ recovery_key }}
+    </h2><br><br>
+
+    <input type="checkbox" id="confirm_saved" onchange="document.getElementById('proceedBtn').disabled = !this.checked">
+    <label for="confirm_saved">I have written down or printed this key and stored it somewhere safe</label><br><br>
+
+    <a href="/login">
+        <button id="proceedBtn" type="button" disabled>Proceed</button>
+    </a>
 </body>
 </html>

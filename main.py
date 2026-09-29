@@ -11,18 +11,31 @@ from enum import Enum
 from fastapi import WebSocket, WebSocketDisconnect
 from collections import Counter
 from sqlalchemy import desc
+import pyttsx3
 import secrets
 import string
 import bcrypt
-
+import asyncio
 
 # For authentication(recovery key)
 import secrets
 import string
 
 app = FastAPI()
+app.add_middleware(SessionMiddleware, secret_key="replace-this-with-a-random-secret-key")
 templates = Jinja2Templates(directory="templates")
 priority_streak = 0
+
+
+PRINT_FIRST_SHEET_ROWS = 14
+PRINT_NEXT_SHEET_ROWS = 22
+
+def parse_date(value: str):
+    try:
+        return date.fromisoformat(value) if value else None
+    except ValueError:
+        return None
+
 
 def active_queue_today():
     """Tickets registered today that are still in the queue."""
@@ -43,20 +56,171 @@ class StatusEnum(str, Enum):
     INACTIVE = "Inactive"
     
 app.mount("/static", StaticFiles(directory="static"), name="static")
-# TODO: 
-# 1. when opening the app, it will show first the setup 1 and 2. but the setup was done, it will direct to the login.
-# 2. when i click forgot password, it will go to the forgot password page.
-# 3. after the setup, it wil go to the login page.
+
+# WEBSOCKET
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+        
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        
+    def disconnect(self, websocket: WebSocket):
+            self.active_connections.remove(websocket)
+            
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)
+manager = ConnectionManager()
+
+@app.websocket("/ws/display")
+async def websocket_display(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+def notify_display_update():
+    asyncio.run(manager.broadcast("update"))
+    
+# ANNOUNCEMENT AUDIO
+def announce_ticket(ticket_number: str):
+    engine = pyttsx3.init()
+    engine.say(f"Ticket number {ticket_number}, please proceed to the counter")
+    engine.runAndWait()
+
 
 
 @app.get("/")
 def read_root():
-    return RedirectResponse(url="/dashboard", status_code = 303)
+    db = SessionLocal()
+    user_exists = db.query(Admin).first()
+    db.close()
+    if not user_exists:
+        return RedirectResponse(url="/setup", status_code=303)
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.get("/setup")
+def show_setup(request: Request):
+    db = SessionLocal()
+    existing_admin = db.query(Admin).first()
+    db.close()
+
+    if existing_admin:
+        return RedirectResponse(url="/login", status_code=303)
+
+    return templates.TemplateResponse(request, "setup1.html", {})
 
 
+@app.post("/setup")
+def process_setup(request: Request, username: str = Form(...), password: str = Form(...), confirm_password: str = Form(...)):
+    if password != confirm_password:
+        return templates.TemplateResponse(request, "setup1.html", {"error": "Passwords do not match"})
+
+    if len(password) < 8:
+        return templates.TemplateResponse(request, "setup1.html", {"error": "Password must be at least 8 characters"})
+
+    recovery_key = generate_recovery_key()
+
+    password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    recovery_key_hash = bcrypt.hashpw(recovery_key.encode(), bcrypt.gensalt()).decode()
+
+    db = SessionLocal()
+    new_admin = Admin(username=username, password_hash=password_hash, recovery_key_hash=recovery_key_hash)
+    db.add(new_admin)
+    db.commit()
+    db.close()
+
+    response = templates.TemplateResponse(request, "setup2.html", {"recovery_key": recovery_key})
+    return response
+
+
+@app.get("/login")
+def show_login(request: Request):
+    return templates.TemplateResponse(request, "login.html", {})
+
+
+@app.post("/login")
+def process_login(request: Request, username: str = Form(...), password: str = Form(...)):
+    db = SessionLocal()
+    admin = db.query(Admin).filter(Admin.username == username).first()
+    db.close()
+
+    if not admin or not bcrypt.checkpw(password.encode(), admin.password_hash.encode()):
+        return templates.TemplateResponse(request, "login.html", {"error": "Invalid username or password"})
+
+    request.session["admin_id"] = admin.id
+    return RedirectResponse(url="/display", status_code=303)
+
+
+
+@app.get("/forgot-password")
+def show_forgot_password(request: Request):
+    return templates.TemplateResponse(request, "forgot_password.html", {})
+
+@app.post("/forgot-password")
+def process_forgot_password(
+    request: Request,
+    username: str = Form(...),
+    recovery_key: str = Form(...),
+    new_password: str = Form(...),
+    confirm_password: str = Form(...),
+):
+    db = SessionLocal()
+    admin = db.query(Admin).filter(Admin.username == username).first()
+
+    error = None
+    if not admin or not admin.recovery_key_hash or not bcrypt.checkpw(recovery_key.encode(), admin.recovery_key_hash.encode()):
+        error = "Invalid username or recovery key"
+    elif new_password != confirm_password:
+        error = "Passwords do not match"
+    elif len(new_password) < 8:
+        error = "Password must be at least 8 characters"
+
+    if error:
+        db.close()
+        return templates.TemplateResponse(request, "forgot_password.html", {"error": error})
+
+    # Reset password AND issue a brand new recovery key (the old one was just used, so retire it)
+    new_recovery_key = generate_recovery_key()
+    admin.password_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+    admin.recovery_key_hash = bcrypt.hashpw(new_recovery_key.encode(), bcrypt.gensalt()).decode()
+    db.commit()
+    db.close()
+
+    return templates.TemplateResponse(request, "recovery_key_display.html", {"recovery_key": new_recovery_key})
+
+@app.post("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/login", status_code=303)
+
+def require_login(request: Request):
+    if "admin_id" not in request.session:
+        return RedirectResponse(url="/login", status_code=303)
+    return None
+
+def generate_recovery_key():
+    """Generates a key like BQS-7F3K-9D2M-XQ1R"""
+    chars = string.ascii_uppercase + string.digits
+    groups = ["".join(secrets.choice(chars) for _ in range(4)) for _ in range(3)]
+    return "BQS-" + "-".join(groups)
+
+
+def get_current_admin(request: Request):
+    admin_id = request.session.get("admin_id")
+    if not admin_id:
+        return None
+    db = SessionLocal()
+    admin = db.query(Admin).filter(Admin.id == admin_id).first()
+    db.close()
+    return admin
 
 @app.get("/dashboard")
-def show_dashboard(request: Request):
+def show_dashboard(request: Request, announce: str = ""):
     db = SessionLocal()
     tickets = db.query(Ticket).all()
     services = db.query(Service).all()
@@ -128,7 +292,8 @@ def show_dashboard(request: Request):
         "no_show_count": no_show_count,
         "tickets": tickets,
         "services": services,
-        "service_volume": service_volume
+        "service_volume": service_volume,
+        "announce": announce,
     })
     db.close()
     return response
@@ -370,6 +535,20 @@ def show_dislay(request: Request):
     db.close()
     return response
 
+def apply_visit_filters(query, date_from, date_to, lane, service_id, q):
+    """Use this in BOTH /attendance and /attendance/print so they never disagree."""
+    if date_from:
+        query = query.filter(Visit.date >= date_from)
+    if date_to:
+        query = query.filter(Visit.date >= date_to)
+    if lane:
+        query = query.filter(Visit.lane == lane)
+    if service_id:
+        query = query.filter(Visit.service_id == service_id)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(Visit.ticket_number.ilike(like) | Visit.citizen_name(like)) 
+    return query
 
 # SERVICE
 @app.get("/services")
@@ -418,4 +597,3 @@ def delete_service(service_id: int):
         db.commit()
     db.close()
     return RedirectResponse(url="/services", status_code=303)
-

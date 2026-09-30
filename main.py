@@ -27,9 +27,6 @@ app.add_middleware(SessionMiddleware, secret_key="replace-this-with-a-random-sec
 templates = Jinja2Templates(directory="templates")
 priority_streak = 0
 
-
-PRINT_FIRST_SHEET_ROWS = 14
-PRINT_NEXT_SHEET_ROWS = 22
 PAGE_SIZE = 15
 
 def parse_date(value: str):
@@ -527,7 +524,8 @@ def no_show_ticket(ticket_id: int):
 @app.get("/attendance")
 def show_attendance(
     request: Request,
-    date: str = "",
+    date_from: str = "",
+    date_to: str = "",
     lane: str = "",
     service_id: str = "",
     q: str = "",
@@ -539,7 +537,7 @@ def show_attendance(
         # Single day filter - defaults to today when `date` is empty.
         # (resolve_date_range takes a from/to pair; passing `date` for both
         # gives one day, exactly like the print route's single-day case.)
-        d_from, d_to = resolve_date_range(date, date)
+        d_from, d_to = resolve_date_range(date_from, date_to)
 
         base = apply_visit_filters(db.query(Visit), d_from, d_to, lane, service_id_int, q)
 
@@ -562,7 +560,10 @@ def show_attendance(
         response = templates.TemplateResponse(request, "attendance.html", {
             "visits": visits,
             "services": services,
-            "date": d_from.isoformat(),     # feeds <input type="date" value="...">, always a real date
+            
+            "date_from": d_from.isoformat(),   # feeds the "From Date" input
+            "date_to": d_to.isoformat(),
+            
             "lane": lane,
             "service_id": service_id_int,
             "search": q,
@@ -615,6 +616,7 @@ def apply_visit_filters(query, d_from, d_to, lane, service_id, q):
 
 @app.get("/attendance/print")
 def attendance_print(request: Request, date_from: str = "", date_to: str = "", lane: str = "", service_id: str = "", q: str = ""):
+    
     service_id_int = int(service_id) if service_id else None
     
     db = SessionLocal()
@@ -634,13 +636,6 @@ def attendance_print(request: Request, date_from: str = "", date_to: str = "", l
         
         rows = base.order_by(Visit.created_at).all()
         
-        sheets = [{"rows": rows[:PRINT_FIRST_SHEET_ROWS], "start": 1}]
-        rest = rows[PRINT_FIRST_SHEET_ROWS:]
-        for i in range(0, len(rest), PRINT_NEXT_SHEET_ROWS):
-            sheets.append({
-                "rows": rest[i:i + PRINT_NEXT_SHEET_ROWS],
-                "start": PRINT_FIRST_SHEET_ROWS + i + 1,
-            })
 
         # Human-readable filter summary for the toolbar
         service = db.get(Service, service_id_int) if service_id_int else None
@@ -648,14 +643,15 @@ def attendance_print(request: Request, date_from: str = "", date_to: str = "", l
         parts = [
             range_label(d_from, d_to),
             lane.title() if lane else "All Types",
-            service.name if service else "All Services",
+            service.service_name if service else "All Services",
         ]
         if q:
             parts.append(f'Search: "{q}"')
             
         return templates.TemplateResponse(request,"print_attendance.html", {
-            "sheets": sheets,
+            
             "stats": stats,
+            "rows": rows,
             "total_rows": len(rows),
             "filters_text": ", ".join(parts),
             "range_text": range_label(d_from, d_to),

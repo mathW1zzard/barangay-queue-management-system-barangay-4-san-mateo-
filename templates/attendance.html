@@ -126,32 +126,35 @@
                     <div class="content-header-row">
                         <h2>Client Attendance</h2>
                         <a class="btn-print" target="_blank" rel="noopener"
-                            href="/attendance/print?date_from={{ date }}&date_to={{ date }}&client_type={{ client_type }}&service_id={{ service_id or '' }}&q={{ search }}">Print
+                            href="/attendance/print?date_from={{ date_from }}&date_to={{ date_to }}&lane={{ lane }}&service_id={{ service_id or '' }}&q={{ search }}">Print
                             Attendance</a>
                     </div>
 
                     <!--FILTER CONTAINER-->
                     <form id="filter-form" method="get" action="/attendance" class="filter-container">
-                        <!--DATE RANGE-->
                         <div class="filter-group">
-                            <label for="date">Date Range:</label>
-                            <input type="date" name="date" id="date" value="{{ date }}">
+                            <label for="date_from">From Date:</label>
+                            <input type="date" name="date_from" id="date_from" value="{{ date_from }}">
+                        </div>
+                        <div class="filter-group">
+                            <label for="date_to">To Date:</label>
+                            <input type="date" name="date_to" id="date_to" value="{{ date_to }}">
                         </div>
 
                         <!--CLLIENT TYPE-->
                         <div class="filter-group">
-                            <label for="client-type">Client Type:</label>
-                            <select name="lane" id="client-type">
+                            <label for="lane">Client Type:</label>
+                            <select name="lane" id="lane">
                                 <option value="" {{ "selected" if not lane }}>All Types</option>
-                            <option value="P" {{ "selected" if lane=="P" }}>Priority</option>
-                            <option value="R" {{ "selected" if lane=="R" }}>Regular</option>
+                                <option value="P" {{ "selected" if lane=="P" }}>Priority</option>
+                                <option value="R" {{ "selected" if lane=="R" }}>Regular</option>
                             </select>
                         </div>
 
                         <!--REQUESTED SERVICES-->
                         <div class="filter-group">
                             <label for="services">Requested Services:</label>
-                            <select name="services" id="services">
+                            <select name="service_id" id="service_id">
                                 <option value="">All Lanes</option>
                                 {% for service in services %}
                                 <option value="{{ service.id }}" {{ "selected" if service_id==service.id }}>
@@ -218,8 +221,8 @@
                             </p>
 
                             <div class="pagination">
-                                {% set qs = "date=" + date + "&lane=" + lane + "&service_id=" +
-                                (service_id|string if service_id else "") + "&q=" + search %}
+                                {% set qs = "date_from=" + date_from + "&date_to=" + date_to + "&lane=" + lane +
+                                "&service_id=" + (service_id|string if service_id else "") + "&q=" + search %}
 
                                 <a class="page-btn {{ 'disabled' if page <= 1 }}"
                                     href="/attendance?{{ qs }}&page={{ page - 1 if page > 1 else 1 }}">Previous</a>
@@ -238,6 +241,24 @@
                 </section>
             </div>
         </main>
+    </aside>
+
+    <script>
+        // Auto-submit on every filter change, so the table updates without a
+        // separate "Apply" button. Covers both date inputs and both selects.
+        const form = document.getElementById('filter-form');
+        form.querySelectorAll('input[type="date"], select').forEach(el => {
+            el.addEventListener('change', () => form.submit());
+        });
+
+        // Search box waits 400ms after typing stops before submitting.
+        const search = document.getElementById('search-client');
+        let searchTimer;
+        search.addEventListener('input', () => {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => form.submit(), 400);
+        });
+    </script>
 </body>
 
 </html>

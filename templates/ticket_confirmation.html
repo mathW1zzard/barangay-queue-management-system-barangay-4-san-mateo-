@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ticket Confirmation</title>
+</head>
+<body>
+    <h1>Ticket Registered</h1>
+
+    <h2 style="font-size: 48px;">{{ ticket_number }}</h2>
+
+    <p><strong>Name:</strong> {{ citizen_name }}</p>
+    <p><strong>Service:</strong> {{ service_name }}</p>
+    <p><strong>Lane:</strong> {% if lane == "P" %}Priority{% else %}Regular{% endif %}</p>
+
+    <p>Please wait for your number to be called.</p>
+
+    <a href="/queue_management"><button>Back to Queue Management</button></a>
+</body>
+</html>

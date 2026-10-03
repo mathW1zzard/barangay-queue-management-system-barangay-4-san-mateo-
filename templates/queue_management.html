@@ -26,26 +26,26 @@
 
         <div class="serving-actions">
             <form action="/complete/{{ current_ticket.id }}" method="post">
-                <button type="submit" class="btn btn-success">{{ icon('check', 18) }} Mark complete</button>
+                <button type="submit" class="btn btn-success" data-confirm
+                    data-action="/complete/{{ current_ticket.id }}" 
+                    data-title="Mark as complete?"
+                    data-message="{{ current_ticket.ticket_number }} ({{ current_ticket.citizen_name }}) has been served. This is saved to attendance history and cannot be undone."
+                    data-label="Mark complete" data-variant="success">{{ icon('check', 18) }} Mark complete</button>
             </form>
             <form action="/skip/{{ current_ticket.id }}" method="post">
                 <button type="submit" class="btn btn-outline">{{ icon('skip', 18) }} Skip</button>
             </form>
-            <button type="button" class="btn btn-danger-outline"
-                data-confirm
-                data-action="/no-show/{{ current_ticket.id }}"
-                data-title="Mark as no-show?"
+            <button type="button" class="btn btn-danger-outline" data-confirm
+                data-action="/no-show/{{ current_ticket.id }}" data-title="Mark as no-show?"
                 data-message="{{ current_ticket.ticket_number }} ({{ current_ticket.citizen_name }}) did not come to the counter. This is saved to attendance history and cannot be undone."
-                data-label="Mark as no-show"
-                data-variant="danger">{{ icon('user-x', 18) }} No-show</button>
+                data-label="Mark as no-show" data-variant="danger">{{ icon('user-x', 18) }} No-show</button>
         </div>
         {% else %}
         <div class="serving-idle">
-            <p class="idle-message">{% if upcomming %}Nobody is at the counter. Call the next visitor when you are ready.{% else %}Nobody is at the counter and nobody is waiting.{% endif %}</p>
+            <p class="idle-message">{% if upcomming %}Nobody is at the counter. Call the next visitor when you are
+                ready.{% else %}Nobody is at the counter and nobody is waiting.{% endif %}</p>
             {% if upcomming %}
-            <button type="button" class="btn btn-primary btn-xl"
-                data-confirm
-                data-action="/call-next"
+            <button type="button" class="btn btn-primary btn-xl" data-confirm data-action="/call-next"
                 data-title="Call the next visitor?"
                 data-message="{{ upcomming[0].ticket_number }} ({{ upcomming[0].citizen_name }}) will be called to the counter and the announcement will play."
                 data-label="Call {{ upcomming[0].ticket_number }}">{{ icon('bell', 22) }} Call next</button>
@@ -76,10 +76,14 @@
 <!--QUEUE TABLE-->
 <section class="card">
     <div class="tabs" role="tablist" aria-label="Filter by status">
-        <button type="button" role="tab" class="tab-btn active" aria-selected="true" data-status="all">Active queue <span class="tab-count">{{ all_active }}</span></button>
-        <button type="button" role="tab" class="tab-btn" aria-selected="false" data-status="waiting">Waiting <span class="tab-count">{{ waiting_count }}</span></button>
-        <button type="button" role="tab" class="tab-btn" aria-selected="false" data-status="called">Called <span class="tab-count">{{ called_count }}</span></button>
-        <button type="button" role="tab" class="tab-btn" aria-selected="false" data-status="skipped">Skipped <span class="tab-count">{{ skipped_count }}</span></button>
+        <button type="button" role="tab" class="tab-btn active" aria-selected="true" data-status="all">Active queue
+            <span class="tab-count">{{ all_active }}</span></button>
+        <button type="button" role="tab" class="tab-btn" aria-selected="false" data-status="waiting">Waiting <span
+                class="tab-count">{{ waiting_count }}</span></button>
+        <button type="button" role="tab" class="tab-btn" aria-selected="false" data-status="called">Called <span
+                class="tab-count">{{ called_count }}</span></button>
+        <button type="button" role="tab" class="tab-btn" aria-selected="false" data-status="skipped">Skipped <span
+                class="tab-count">{{ skipped_count }}</span></button>
     </div>
 
     <div class="table-wrap">
@@ -105,20 +109,17 @@
                     <td>
                         {% if ticket.status == "skipped" %}
                         <div class="row-actions">
-                            <button type="button" class="btn btn-sm btn-outline"
-                                {% if current_ticket %}disabled title="Finish the visitor at the counter first"{% else %}
-                                data-confirm
-                                data-action="/recall/{{ ticket.id }}"
-                                data-title="Recall this visitor?"
+                            <button type="button" class="btn btn-sm btn-outline" {% if current_ticket %}disabled
+                                title="Finish the visitor at the counter first" {% else %} data-confirm
+                                data-action="/recall/{{ ticket.id }}" data-title="Recall this visitor?"
                                 data-message="{{ ticket.ticket_number }} ({{ ticket.citizen_name }}) will be called to the counter again and the announcement will play."
-                                data-label="Recall {{ ticket.ticket_number }}"{% endif %}>{{ icon('recall', 16) }} Recall</button>
-                            <button type="button" class="btn btn-sm btn-danger-outline"
-                                data-confirm
-                                data-action="/no-show/{{ ticket.id }}"
-                                data-title="Mark as no-show?"
+                                data-label="Recall {{ ticket.ticket_number }}" {% endif %}>{{ icon('recall', 16) }}
+                                Recall</button>
+                            <button type="button" class="btn btn-sm btn-danger-outline" data-confirm
+                                data-action="/no-show/{{ ticket.id }}" data-title="Mark as no-show?"
                                 data-message="{{ ticket.ticket_number }} ({{ ticket.citizen_name }}) did not come to the counter. This is saved to attendance history and cannot be undone."
-                                data-label="Mark as no-show"
-                                data-variant="danger">{{ icon('user-x', 16) }} No-show</button>
+                                data-label="Mark as no-show" data-variant="danger">{{ icon('user-x', 16) }}
+                                No-show</button>
                         </div>
                         {% endif %}
                     </td>

@@ -1,0 +1,97 @@
+{% from "_macros.html" import icon %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{% endblock %} | Barangay Queue &amp; Service Management</title>
+    <meta name="description" content="{% block description %}{% endblock %}">
+    <link rel="stylesheet" href="/static/style.css">
+    {% block head %}{% endblock %}
+</head>
+
+<body>
+    <div class="shell">
+        <!--SIDEBAR-->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-icon">{{ icon('shield', 24) }}</div>
+                <div class="brand-text">
+                    <h2>Barangay System</h2>
+                    <p>{{ barangay_name }}</p>
+                </div>
+            </div>
+
+            <nav class="nav" aria-label="Main">
+                {% set path = request.url.path %}
+                {% set nav_items = [
+                ('/dashboard', 'Dashboard', 'dashboard'),
+                ('/client_registration', 'Client Registration', 'user-plus'),
+                ('/queue_management', 'Queue Management', 'list'),
+                ('/attendance', 'Attendance', 'calendar'),
+                ('/services', 'Services', 'landmark'),
+                ] %}
+                {% for href, label, ico in nav_items %}
+                <a href="{{ href }}" class="nav-link{{ ' active' if path.startswith(href) }}" {% if
+                    path.startswith(href) %} aria-current="page" {% endif %}>
+                    {{ icon(ico, 20) }}<span>{{ label }}</span>
+                </a>
+                {% endfor %}
+            </nav>
+        </aside>
+
+        <div class="main">
+            <!--TOP BAR-->
+            <header class="topbar">
+                <div class="topbar-title">
+                    <h1>{% block page_title %}{% endblock %}</h1>
+                    <p>{% block page_subtitle %}{% endblock %}</p>
+                </div>
+                <div class="topbar-right">
+                    <span class="queue-pill">Active Queue: <strong>{{ active_queue_today() }}</strong></span>
+                    
+                    <div class="user-menu">
+
+                        <button type="button" class="avatar" id="user-menu-btn" aria-haspopup="menu"
+                            aria-label="Account menu">{{
+                            admin_initials(request) }}</button>
+
+                        <div class="menu" id="user-menu" role="menu">
+                            <a href="/change-password" role="menuitem">{{ icon('key', 18) }} Change password</a>
+
+                            <button type="button" role="menuitem" data-confirm data-action="/logout"
+                                data-title="Log out of your account?"
+                                data-message="You will be signed out and will need to enter your username and password again to use the system."
+                                data-label="Log out">{{ icon('log-out', 18) }} Log out</button>
+                        </div>
+                    </div>
+
+                </div>
+            </header>
+
+            <main class="content">
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <!-- One confirmation dialog for the whole page. Buttons with data-confirm fill it in. -->
+    <dialog id="confirm-dialog" class="modal">
+        <form method="post" id="confirm-form" class="modal-body">
+            <h2 id="confirm-title"></h2>
+            <p id="confirm-message" class="modal-text"></p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" data-close>Cancel</button>
+                <button type="submit" class="btn btn-primary" id="confirm-submit">Confirm</button>
+            </div>
+        </form>
+    </dialog>
+
+    {% block dialogs %}{% endblock %}
+
+    <script src="/static/app.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+
+</html>

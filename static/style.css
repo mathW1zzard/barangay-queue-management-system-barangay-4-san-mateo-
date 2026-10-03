@@ -1,6 +1,13 @@
 /* Barangay Queue & Service Management
    Built for staff reading at a counter, so type runs larger than a typical admin UI. */
 
+@font-face {
+    font-family: "Plus Jakarta Sans";
+    src: url("fonts/PlusJakartaSans-VariableFont_wght.ttf") format("truetype");
+    font-weight: 200 800;
+    font-style: normal;
+    font-display: swap;
+}
 :root {
     --navy: #1e293b;
     --navy-deep: #0f172a;
@@ -147,6 +154,7 @@ select {
 .nav-link:hover {
     background: rgba(255, 255, 255, .07);
     color: #fff;
+    cursor:pointer;
 }
 
 .nav-link.active {
@@ -641,6 +649,7 @@ select:disabled {
     overflow-x: auto;
     margin: 0 -8px;
     padding: 0 8px;
+    max-height: 450px;
 }
 
 table {

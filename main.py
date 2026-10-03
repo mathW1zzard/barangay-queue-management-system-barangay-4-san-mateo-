@@ -13,6 +13,7 @@ from datetime import datetime, date, time
 from starlette.middleware.sessions import SessionMiddleware
 from enum import Enum
 from fastapi import WebSocket, WebSocketDisconnect
+from escpos.printer import Dummy
 from collections import Counter
 from sqlalchemy import desc
 import pyttsx3
@@ -104,6 +105,31 @@ def announce_ticket(ticket_number: str):
         except Exception as e:
             print(f"Announcement failed: {e}")
 
+       
+def print_ticket(ticket_number: str, citizen_name: str, service_name: str, lane: str):
+    printer = Dummy()
+
+    printer.set(align="center", bold=True, width=2, height=2)
+    printer.text(f"{ticket_number}\n")
+
+    printer.set(align="center", bold=False, width=1, height=1)
+    printer.text("-" * 32 + "\n")
+    printer.text(f"Name: {citizen_name}\n")
+    printer.text(f"Service: {service_name}\n")
+    printer.text(f"Lane: {'Priority' if lane == 'P' else 'Regular'}\n")
+    printer.text(f"Time: {datetime.now().strftime('%I:%M %p')}\n")
+    printer.text("-" * 32 + "\n")
+    printer.text("Please wait for your number\nto be called.\n\n")
+
+    printer.cut()
+
+    # Dummy printer doesn't actually print - it just stores the output.
+    # We'll save it to a text file so you can see exactly what WOULD be printed.
+    output = printer.output
+    with open("last_ticket_printed.txt", "wb") as f:
+        f.write(output)
+
+    print("Ticket sent to (dummy) printer - check last_ticket_printed.txt")
 
 @app.get("/")
 def read_root():

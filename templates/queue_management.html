@@ -1,295 +1,142 @@
-<!DOCTYPE html>
-<html lang="en">
+{% extends "base.html" %}
+{% from "_macros.html" import icon, badge, lane_tag %}
+{% block title %}Queue Management{% endblock %}
+{% block page_title %}Queue Management{% endblock %}
+{% block page_subtitle %}Live counter{% endblock %}
+{% block description %}To display the tickets queue{% endblock %}
+{% block content %}
+<!--LIVE PANEL-->
+<section class="live-panel">
+    <!--NOW SERVING-->
+    <div class="card now-serving{{ ' is-idle' if not current_ticket }}">
+        <p class="label">Now serving</p>
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Queue Management</title>
-    <style>
-        .status {
-            text-transform: capitalize;
-        }
-    </style>
-</head>
-
-<body>
-    <!--SIDEBAR-->
-    <aside>
-        <div class="brand">
-            <div class="brand-icon">
-                <!--Change later-->
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                    class="lucide lucide-shield preview-icon">
-                    <path
-                        d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
-                </svg>
+        {% if current_ticket %}
+        <div class="serving-main">
+            <div class="serving-number">
+                <h2>{{ current_ticket.ticket_number }}</h2>
+                {{ lane_tag(current_ticket.lane) }}
             </div>
-            <div class="brand-text">
-                <h2>BARANGAY SYSTEM</h2>
-                <p>Barangay 4, San Mateo, Isabela</p>
+            <div class="serving-person">
+                <p class="label">Visitor</p>
+                <h3>{{ current_ticket.citizen_name }}</h3>
+                <p class="hint">Requested service: <strong>{{ current_ticket.service.service_name }}</strong></p>
             </div>
         </div>
 
-        <!--NAVIGATION-->
-        <nav>
-            <a href="/dashboard" class="active">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-layout-dashboard preview-icon">
-                        <rect width="7" height="9" x="3" y="3" rx="1" />
-                        <rect width="7" height="5" x="14" y="3" rx="1" />
-                        <rect width="7" height="9" x="14" y="12" rx="1" />
-                        <rect width="7" height="5" x="3" y="16" rx="1" />
-                    </svg>
-                </span>
-                <span>Dashboard</span>
-            </a>
-            <a href="/client_registration">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-user-plus preview-icon">
-                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                        <circle cx="9" cy="7" r="4" />
-                        <line x1="19" x2="19" y1="8" y2="14" />
-                        <line x1="22" x2="16" y1="11" y2="11" />
-                    </svg>
-                </span>
-                <span>Client Registration</span>
-            </a>
-            <a href="/queue_management">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-list-ordered preview-icon">
-                        <path d="M11 5h10" />
-                        <path d="M11 12h10" />
-                        <path d="M11 19h10" />
-                        <path d="M4 4h1v5" />
-                        <path d="M4 9h2" />
-                        <path d="M6.5 20H3.4c0-1 2.6-1.925 2.6-3.5a1.5 1.5 0 0 0-2.6-1.02" />
-                    </svg>
-                </span>
-                <span>Queue Management</span>
-            </a>
-            <a href="/attendance">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-calendar preview-icon">
-                        <path d="M8 2v3" />
-                        <path d="M16 2v3" />
-                        <rect x="3" y="3" width="18" height="18" rx="2" />
-                        <path d="M3 9h18" />
-                    </svg>
-                </span>
-                <span>Attendance</span>
-            </a>
-            <a href="/services">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-landmark preview-icon">
-                        <path d="M10 18v-7" />
-                        <path
-                            d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z" />
-                        <path d="M14 18v-7" />
-                        <path d="M18 18v-7" />
-                        <path d="M3 22h18" />
-                        <path d="M6 18v-7" />
-                    </svg>
-                </span>
-                <span>Services</span>
-            </a>
-        </nav>
+        <div class="serving-actions">
+            <form action="/complete/{{ current_ticket.id }}" method="post">
+                <button type="submit" class="btn btn-success">{{ icon('check', 18) }} Mark complete</button>
+            </form>
+            <form action="/skip/{{ current_ticket.id }}" method="post">
+                <button type="submit" class="btn btn-outline">{{ icon('skip', 18) }} Skip</button>
+            </form>
+            <button type="button" class="btn btn-danger-outline"
+                data-confirm
+                data-action="/no-show/{{ current_ticket.id }}"
+                data-title="Mark as no-show?"
+                data-message="{{ current_ticket.ticket_number }} ({{ current_ticket.citizen_name }}) did not come to the counter. This is saved to attendance history and cannot be undone."
+                data-label="Mark as no-show"
+                data-variant="danger">{{ icon('user-x', 18) }} No-show</button>
+        </div>
+        {% else %}
+        <div class="serving-idle">
+            <p class="idle-message">{% if upcomming %}Nobody is at the counter. Call the next visitor when you are ready.{% else %}Nobody is at the counter and nobody is waiting.{% endif %}</p>
+            {% if upcomming %}
+            <button type="button" class="btn btn-primary btn-xl"
+                data-confirm
+                data-action="/call-next"
+                data-title="Call the next visitor?"
+                data-message="{{ upcomming[0].ticket_number }} ({{ upcomming[0].citizen_name }}) will be called to the counter and the announcement will play."
+                data-label="Call {{ upcomming[0].ticket_number }}">{{ icon('bell', 22) }} Call next</button>
+            {% else %}
+            <button type="button" class="btn btn-primary btn-xl" disabled>{{ icon('bell', 22) }} Call next</button>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
 
-        <!--MAIN CONTENT-->
-        <main>
-            <!--TOP HEADER-->
-            <header>
-                <div class="header-left">
-                    <h1>Barangay Queue &amp; Service Management</h1>
-                    <span></span>
-                    <p>Service Configurations</p>
-                </div>
+    <!--UP NEXT-->
+    <div class="card up-next">
+        <p class="label">Up next</p>
+        {% for ticket in upcomming %}
+        <div class="next-item">
+            <div>
+                <p class="next-number">{{ ticket.ticket_number }}</p>
+                <p class="next-name">{{ ticket.citizen_name }}</p>
+            </div>
+            {{ lane_tag(ticket.lane) }}
+        </div>
+        {% else %}
+        <p class="empty-note">Nobody is waiting.</p>
+        {% endfor %}
+    </div>
+</section>
 
-                <div class="header-right">
-                    <div class="active-queue">
-                        <p>Active Queue: <span>{{ active_queue_today() }}</span></p>
-                    </div>
+<!--QUEUE TABLE-->
+<section class="card">
+    <div class="tabs" role="tablist" aria-label="Filter by status">
+        <button type="button" role="tab" class="tab-btn active" aria-selected="true" data-status="all">Active queue <span class="tab-count">{{ all_active }}</span></button>
+        <button type="button" role="tab" class="tab-btn" aria-selected="false" data-status="waiting">Waiting <span class="tab-count">{{ waiting_count }}</span></button>
+        <button type="button" role="tab" class="tab-btn" aria-selected="false" data-status="called">Called <span class="tab-count">{{ called_count }}</span></button>
+        <button type="button" role="tab" class="tab-btn" aria-selected="false" data-status="skipped">Skipped <span class="tab-count">{{ skipped_count }}</span></button>
+    </div>
 
-                    <div class="profile">
-                        <span>MJ</span>
-                    </div>
-                </div>
-            </header>
-
-            <div class="content-container">
-
-                <!--LIVE PANEL-->
-                <section class="live-panel">
-                    <!--NOW SERVING (RIGHT)-->
-                    <div class="now-serving">
-                        {% if current_ticket %}
-                        <div class="serving-info-row">
-                            <div class="serving-number-section">
-                                <p>NOW SERVING</p>
-                                <h2>{{ current_ticket.ticket_number }}</h2>
-
-                                <span class="priority-badge">{% if current_ticket.lane == "P" %}Priority{% else
-                                    %}Regular{%
-                                    endif %} Lane</span>
-                            </div>
-                            <div class="visitor-info-section">
-                                <p>Current Visitor Name</p>
-                                <h3>{{ current_ticket.citizen_name }}</h3>
-                                <p class="service-req">Requested Service: <span>{{ current_ticket.service.service_name
-                                        }}</span>
-                                </p>
-                            </div>
-                        </div>
-                        {% else %}
-                        <div class="serving-info-row">
-                            <p>No visitor currently being served.</p>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Ticket</th>
+                    <th>Visitor name</th>
+                    <th>Type</th>
+                    <th>Service</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ticket in tickets %}
+                <tr class="ticket-row" data-status="{{ ticket.status }}">
+                    <td class="cell-primary">{{ ticket.ticket_number }}</td>
+                    <td class="cell-primary">{{ ticket.citizen_name }}</td>
+                    <td>{{ lane_tag(ticket.lane) }}</td>
+                    <td>{{ ticket.service.service_name }}</td>
+                    <td>{{ badge(ticket.status) }}</td>
+                    <td>
+                        {% if ticket.status == "skipped" %}
+                        <div class="row-actions">
+                            <button type="button" class="btn btn-sm btn-outline"
+                                {% if current_ticket %}disabled title="Finish the visitor at the counter first"{% else %}
+                                data-confirm
+                                data-action="/recall/{{ ticket.id }}"
+                                data-title="Recall this visitor?"
+                                data-message="{{ ticket.ticket_number }} ({{ ticket.citizen_name }}) will be called to the counter again and the announcement will play."
+                                data-label="Recall {{ ticket.ticket_number }}"{% endif %}>{{ icon('recall', 16) }} Recall</button>
+                            <button type="button" class="btn btn-sm btn-danger-outline"
+                                data-confirm
+                                data-action="/no-show/{{ ticket.id }}"
+                                data-title="Mark as no-show?"
+                                data-message="{{ ticket.ticket_number }} ({{ ticket.citizen_name }}) did not come to the counter. This is saved to attendance history and cannot be undone."
+                                data-label="Mark as no-show"
+                                data-variant="danger">{{ icon('user-x', 16) }} No-show</button>
                         </div>
                         {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                <tr id="tab-empty" {% if tickets %}hidden{% endif %}>
+                    <td colspan="6" class="empty-row">No tickets in this view.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
 
-                        <div class="now-serve-btns">
-                            <form action="/call-next" method="post">
-                                <button type="submit" id="call-next" {% if current_ticket %}disabled{% endif %}>Call
-                                    Next</button>
-                            </form>
-
-                            {% if current_ticket %}
-                            <form action="/complete/{{ current_ticket.id }}" method="post" style="display:inline">
-                                <button type="submit">Complete</button>
-                            </form>
-                            <form action="/skip/{{ current_ticket.id }}" method="post" style="display:inline">
-                                <button type="submit">Skip</button>
-                            </form>
-                            <form action="/no-show/{{ current_ticket.id }}" method="post" style="display:inline">
-                                <button type="submit">No-Show</button>
-                            </form>
-                            {% endif %}
-                        </div>
-
-                    </div>
-
-                    <!--UP NEXT (LEFT)-->
-                    <div class="up-next">
-                        <h4>UP NEXT</h4>
-                        {% for ticket in upcomming %}
-                        <div class="waiting-list">
-                            <!--LIST INFORMATION-->
-                            <div class="list-info">
-                                <div class="ticket-info">
-                                    <h4>{{ ticket.ticket_number }}</h4>
-                                    <p>{{ ticket.citizen_name }}</p>
-                                </div>
-                                <span>{% if ticket.lane == "P" %}Priority{% else %}Regular{% endif %}</span>
-                            </div>
-
-                        </div>
-                        {% else %}
-                        <div class="default-list">
-                            <h3>No on waiting</h3>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </section>
-
-                <!--TABLE CARD-->
-                <section>
-                    <div class="table-tabs">
-                        <button type="button" class="tab-btn active" data-status="all">Active Queue (<span>{{ all_active
-                                }}</span>)</button>
-                        <button type="button" class="tab-btn" data-status="waiting">Waiting (<span>{{ waiting_count
-                                }}</span>)</button>
-                        <button type="button" class="tab-btn" data-status="called">Called (<span>{{ called_count
-                                }}</span>)</button>
-                        <button type="button" class="tab-btn" data-status="skipped">Skipped (<span>{{ skipped_count
-                                }}</span>)</button>
-                    </div>
-
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Ticket#</th>
-                                    <th>Visitor Name</th>
-                                    <th>Type</th>
-                                    <th>Service</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            {% for ticket in tickets %}
-                            <tbody>
-                                <tr class="ticket-row" data-status="{{ ticket.status }}">
-                                    <td>{{ ticket.ticket_number }}</td>
-                                    <td>{{ ticket.citizen_name }}</td>
-                                    <td>{% if ticket.lane == "P" %}Priority{% else %}Regular{% endif %}</td>
-                                    <td>{{ ticket.service.service_name }}</td>
-                                    <td class="status status-{{ ticket.status }}">{{ ticket.status.replace('_', ' ') }}
-                                    </td>
-                                    <td>{% if ticket.status == "skipped" %}
-                                        <form action="/recall/{{ ticket.id }}" method="post" style="display:inline">
-                                            <button type="submit">Recall</button>
-                                        </form>
-                                        <form action="/no-show/{{ ticket.id }}" method="post" style="display:inline">
-                                            <button type="submit">No-Show</button>
-                                        </form>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                            </tbody>
-                            {% else %}
-                            <tbody>
-                                <tr><td colspan="6">N/A</td></tr>
-                            </tbody>
-                            {% endfor %}
-                        </table>
-                    </div>
-                </section>
-            </div>
-        </main>
-    </aside>
-
-    <script>
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                const status = btn.dataset.status;
-                document.querySelectorAll('.ticket-row').forEach(row => {
-                    row.parentElement.style.display =
-                        (status === 'all' || row.dataset.status === status) ? '' : 'none';
-                });
-            });
-        });
-    </script>
-
-    <script>
-        const urlParams = new URLSearchParams(window.location.search);
-        const justAnnounced = urlParams.get("announce");
-
-        const socket = new WebSocket("ws://" + window.location.host + "/ws/display");
-
-        socket.onmessage = function (event) {
-            if (justAnnounced) {
-                location.reload();
-            }
-        };
-    </script>
-
-    {% if announce %}
-    <script>
-        const msg = new SpeechSynthesisUtterance("Ticket {{ announce }}, please proceed to the counter.");
-        window.speechSynthesis.speak(msg);
-    </script>
-    {% endif %}
-</body>
-
-</html>
+{% block scripts %}
+<script>
+    // Reload when the server announces a queue change
+    const socket = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/display");
+    socket.onmessage = () => location.reload();
+</script>
+{% endblock %}

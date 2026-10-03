@@ -1,235 +1,128 @@
-<!DOCTYPE html>
-<html lang="en">
+{% extends "base.html" %}
+{% from "_macros.html" import icon, lane_tag %}
+{% block title %}Client Registration{% endblock %}
+{% block page_title %}Client Registration{% endblock %}
+{% block description %}To register a new ticket for resident{% endblock %}
+{% block page_subtitle %}New visitor{% endblock %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Client Registration</title>
-</head>
+{% block content %}
+{% set active_services = services|selectattr('service_status', 'equalto', 'Active')|list %}
 
-<body>
-    <!--SIDEBAR-->
-    <aside>
-        <div class="brand">
-            <div class="brand-icon">
-                <!--Change later-->
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                    class="lucide lucide-shield preview-icon">
-                    <path
-                        d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
-                </svg>
-            </div>
-            <div class="brand-text">
-                <h2>BARANGAY SYSTEM</h2>
-                <p>Barangay 4, San Mateo, Isabela</p>
-            </div>
+<section class="card form-card form-card-wide">
+    <h2>Client Ticket Dispenser</h2>
+    <p class="hint">Fill in the client's details and choose Priority or Regular lane.</p>
+
+    <form action="/register" method="post" class="form">
+        <div class="field">
+            <label for="citizen_name">Client full name</label>
+            <input type="text" name="citizen_name" id="citizen_name" autocomplete="off" required>
         </div>
 
-        <!--NAVIGATION-->
-        <nav>
-            <a href="/dashboard" class="active">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-layout-dashboard preview-icon">
-                        <rect width="7" height="9" x="3" y="3" rx="1" />
-                        <rect width="7" height="5" x="14" y="3" rx="1" />
-                        <rect width="7" height="9" x="14" y="12" rx="1" />
-                        <rect width="7" height="5" x="3" y="16" rx="1" />
-                    </svg>
-                </span>
-                <span>Dashboard</span>
-            </a>
-            <a href="/client_registration">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-user-plus preview-icon">
-                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                        <circle cx="9" cy="7" r="4" />
-                        <line x1="19" x2="19" y1="8" y2="14" />
-                        <line x1="22" x2="16" y1="11" y2="11" />
-                    </svg>
-                </span>
-                <span>Client Registration</span>
-            </a>
-            <a href="/queue_management">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-list-ordered preview-icon">
-                        <path d="M11 5h10" />
-                        <path d="M11 12h10" />
-                        <path d="M11 19h10" />
-                        <path d="M4 4h1v5" />
-                        <path d="M4 9h2" />
-                        <path d="M6.5 20H3.4c0-1 2.6-1.925 2.6-3.5a1.5 1.5 0 0 0-2.6-1.02" />
-                    </svg>
-                </span>
-                <span>Queue Management</span>
-            </a>
-            <a href="/attendance">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-calendar preview-icon">
-                        <path d="M8 2v3" />
-                        <path d="M16 2v3" />
-                        <rect x="3" y="3" width="18" height="18" rx="2" />
-                        <path d="M3 9h18" />
-                    </svg>
-                </span>
-                <span>Attendance</span>
-            </a>
-            <a href="/services">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-landmark preview-icon">
-                        <path d="M10 18v-7" />
-                        <path
-                            d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z" />
-                        <path d="M14 18v-7" />
-                        <path d="M18 18v-7" />
-                        <path d="M3 22h18" />
-                        <path d="M6 18v-7" />
-                    </svg>
-                </span>
-                <span>Services</span>
-            </a>
-        </nav>
+        <div class="field">
+            <label for="service_id">Requested service</label>
+            <select name="service_id" id="service_id" required {% if not active_services %}disabled{% endif %}>
+                {% for service in active_services %}
+                <option value="{{ service.id }}">{{ service.service_name }}</option>
+                {% else %}
+                <option value="">No active services. Add one on the Services page.</option>
+                {% endfor %}
+            </select>
+        </div>
 
-        <!--MAIN CONTENT-->
-        <main>
-            <!--TOP HEADER-->
-            <header>
-                <div class="header-left">
-                    <h1>Barangay Queue &amp; Service Management</h1>
-                    <span></span>
-                    <p>New Visitor Registration</p>
-                </div>
-
-                <div class="header-right">
-                    <div class="active-queue">
-                        <p>Active Queue: <span>{{ active_queue_today() }}</span></p>
-                    </div>
-
-                    <div class="profile">
-                        <span>MJ</span>
-                    </div>
-                </div>
-            </header>
-
-            <div class="content-container">
-                <div class="ticket-registration">
-                    <h2>Client Ticket Dispenser</h2>
-                    <p>Fill in client details and select Priority or Regular lane</p>
-                </div>
-
-                <div class="ticket-register-form">
-                    <form action="/register" method="post">
-
-                        <!--CLIENT FULL NAME-->
-                        <div class="form-group">
-                            <label for="name">Client Full Name</label>
-                            <input type="text" name="citizen_name" id="citizen_name" required>
-                        </div>
-
-                        <!--SELECT SERVICE-->
-                        <div class="form-group">
-                            <label for="service">Select Requested Services</label>
-                            <select name="service_id">
-                                {% for service in services %}
-                                {% if service.service_status == "Active" %}
-                                <option value="{{ service.id }}">{{ service.service_name }}</option>
-                                {% endif %}
-                                {% endfor %}
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="">Lane / Client Classification</label>
-
-                            <div class="lane">
-                                <input type="radio" name="lane" id="priority" value="P" required>
-                                <label for="priority">Priority</label>
-                            </div>
-
-                            <div class="lane">
-                                <input type="radio" name="lane" id="regular" value="R">
-                                <label for="regular">Regular</label>
-                            </div>
-                        </div>
-
-                        <button type="submit">Generate and Print Ticket Stub</button>
-
-                        <dialog id="ticketDialog">
-                            <div class="ticket-slip">
-                                <p class="ticket-org">BARANGAY SAN JOSE</p>
-                                <p class="ticket-sub">Official Queue Slip</p>
-                                <hr>
-                                <h1 id="ticketNumber">P-000</h1>
-                                <span id="laneTag" class="lane-tag">PRIORITY LANE</span>
-                                <hr>
-                                <div class="ticket-detail-row">
-                                    <span>Client Name:</span><strong id="ticketClientName"></strong>
-                                </div>
-                                <div class="ticket-detail-row">
-                                    <span>Service:</span><strong id="ticketServiceName"></strong>
-                                </div>
-                                <div class="ticket-detail-row">
-                                    <span>Date &amp; Time:</span><span id="ticketDateTime"></span>
-                                </div>
-                                <hr>
-                                <p class="ticket-note">Please wait for your number to be called. Thank you!</p>
-                            </div>
-
-                            <button id="printBtn" class="btn-primary">🖨 Print Ticket Slip</button>
-                            <button id="registerAnotherBtn" class="btn-secondary">Register Another Client</button>
-                        </dialog>
-                    </form>
-                </div>
-
-                <div class="table-container">
-                    <div class="card-header">
-                        <h2>My Dispensed Today (Today's History)</h2>
-                    </div>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Ticket Number</th>
-                                <th>Visitor Name</th>
-                                <th>Service Category</th>
-                                <th>Time Dispensed</th>
-                            </tr>
-                        </thead>
-
-                        {% for ticket in tickets %}
-                        <tbody>
-                            <tr>
-                                <td>{{ ticket.ticket_number }}</td>
-                                <td>{{ ticket.citizen_name }}</td>
-                                <td>{{ ticket.service.service_name }}</td>
-                                <td>{{ ticket.created_at.strftime('%I:%M %p')}}</td> <!--<-I wanted to join the time-->
-                            </tr>
-                        </tbody>
-                        {% else %}
-                        <tbody>
-                            <tr>
-                                <td>N/A</td>
-                                <td>N/A</td>
-                                <td>N/A</td>
-                                <td>N/A</td>
-                                <td>N/A</td>
-                            </tr>
-                        </tbody>
-                        {% endfor %}
-                    </table>
-                </div>
+        <fieldset class="field lane-choice">
+            <legend>Client classification</legend>
+            <div class="lane-grid">
+                <label class="lane-card">
+                    <input type="radio" name="lane" value="P">
+                    <span class="lane-card-text">
+                        <span class="lane-card-title">Priority</span>
+                        <span class="lane-card-desc">Senior citizens, persons with disabilities, pregnant women</span>
+                    </span>
+                    <span class="lane-dot" aria-hidden="true"></span>
+                </label>
+                <label class="lane-card">
+                    <input type="radio" name="lane" value="R" checked>
+                    <span class="lane-card-text">
+                        <span class="lane-card-title">Regular</span>
+                        <span class="lane-card-desc">All other walk-in visitors</span>
+                    </span>
+                    <span class="lane-dot" aria-hidden="true"></span>
+                </label>
             </div>
-        </main>
-    </aside>
-</body>
+        </fieldset>
 
-</html>
+        <button type="submit" class="btn btn-primary btn-block btn-lg" {% if not active_services %}disabled{% endif
+            %}>Generate ticket</button>
+    </form>
+</section>
+
+<section class="card">
+    <h2 class="card-title">Registered Today <span class="count-pill">{{ total_today }}</span></h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Ticket</th>
+                    <th>Visitor name</th>
+                    <th>Type</th>
+                    <th>Service</th>
+                    <th>Time registered</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ticket in tickets %}
+                <tr>
+                    <td class="cell-primary">{{ ticket.ticket_number }}</td>
+                    <td class="cell-primary">{{ ticket.citizen_name }}</td>
+                    <td>{{ lane_tag(ticket.lane) }}</td>
+                    <td>{{ ticket.service.service_name }}</td>
+                    <td>{{ ticket.created_at.strftime('%I:%M %p') }}</td>
+                    <td>
+                        <div class="row-actions">
+                            <button type="button" class="btn btn-sm btn-danger-outline" data-confirm
+                                data-action="/tickets/delete/{{ ticket.id }}" data-title="Delete this ticket?"
+                                data-message="{{ ticket.ticket_number }} ({{ ticket.citizen_name }}) will be removed from the queue.{% if ticket.status == 'called' %} This visitor is being served right now, so the counter will become free.{% endif %} Deleted tickets are not saved to attendance history and cannot be restored."
+                                data-label="Delete ticket" data-variant="danger">{{ icon('trash', 16) }} Delete</button>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="empty-row">No tickets registered yet today.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
+
+{% block dialogs %}
+{% if new_ticket %}
+<dialog id="ticket-dialog" class="modal modal-slip" data-autoopen="true">
+    <div class="modal-body">
+        <div class="ticket-slip" id="ticket-slip">
+            <p class="ticket-org">{{ barangay_name|upper }}</p>
+            <p class="ticket-sub">Official queue slip</p>
+            <hr>
+            <p class="ticket-number">{{ new_ticket.ticket_number }}</p>
+            <span class="tag {{ 'tag-priority' if new_ticket.lane == 'P' else 'tag-regular' }} tag-lg">{{ 'Priority
+                lane' if new_ticket.lane == 'P' else 'Regular lane' }}</span>
+            <hr>
+            <div class="slip-row"><span>Client name</span><strong>{{ new_ticket.citizen_name }}</strong></div>
+            <div class="slip-row"><span>Service</span><strong>{{ new_ticket.service.service_name }}</strong></div>
+            <div class="slip-row"><span>Date and time</span><strong>{{ new_ticket.created_at.strftime('%b %d, %Y %I:%M
+                    %p') }}</strong></div>
+            <hr>
+            <p class="ticket-note">Please wait for your number to be called. Thank you!</p>
+        </div>
+
+        <div class="modal-actions no-print">
+            <button type="button" class="btn btn-outline" id="register-another">Register another client</button>
+            <button type="button" class="btn btn-primary" id="print-slip">{{ icon('printer', 18) }} Print slip</button>
+        </div>
+    </div>
+</dialog>
+{% endif %}
+{% endblock %}

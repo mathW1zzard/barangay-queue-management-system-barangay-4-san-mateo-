@@ -1,24 +1,17 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Save your Recovery Key</title>
-</head>
-<body>
-    <h1>Save your recovery key</h1>
-    <p>This key is the only way back in if the Administrator account is ever locked out.
-        It will not be shown again - write it down and keep it somewhere safe.</p>
+{% extends "auth_base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}New recovery key{% endblock %}
+{% block badge %}{{ icon('key', 26) }}{% endblock %}
+{% block heading %}Save your new recovery key{% endblock %}
+{% block description %}To save new recovery key{% endblock %}
+{% block intro %}<p class="auth-intro">Your password was reset and the old recovery key no longer works. This new key is the only way back in if you are ever locked out again. It will not be shown again.</p>{% endblock %}
+{% block body %}
+        <div class="recovery-key" aria-label="Recovery key">{{ recovery_key }}</div>
 
-    <h2 style="letter-spacing: 2px; background: #eee; padding: 10px; display: inline-block;">
-        {{ recovery_key }}
-    </h2><br><br>
+        <label class="check-row">
+            <input type="checkbox" id="confirm_saved" data-unlocks="proceedLink">
+            <span>I have written down or printed this key and stored it somewhere safe</span>
+        </label>
 
-    <input type="checkbox" id="confirm_saved" onchange="document.getElementById('proceedBtn').disabled = !this.checked">
-    <label for="confirm_saved">I have written down or printed this key and stored it somewhere safe</label><br><br>
-
-    <a href="/login">
-        <button id="proceedBtn" type="button" disabled>Proceed to Sign in</button>
-    </a>
-</body>
-</html>
+        <a href="/login" id="proceedLink" class="btn btn-primary btn-block is-disabled" aria-disabled="true" tabindex="-1">Continue to sign in</a>
+{% endblock %}

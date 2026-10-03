@@ -1,26 +1,18 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Step 2 - First Time Setup</title>
-    
-</head>
-<body>
-    <h3 style="color: darkorange;">FIRST-TIME SETUP • STEP 2 OF 2</h3>
-    <h1>Save your recovery key</h1>
-    <p>This key is the only way back in if the Administrator account is ever locked out.
-        It will not be shown again - write it down and keep it with the Barangay Captain.</p>
+{% extends "auth_base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Set up - Step 2 of 2{% endblock %}
+{% block badge %}{{ icon('key', 26) }}{% endblock %}
+{% block eyebrow %}<p class="step-indicator">First-time setup &middot; Step 2 of 2</p>{% endblock %}
+{% block heading %}Save your recovery key{% endblock %}
+{% block description %}2nd step to create a new account{% endblock %}
+{% block intro %}<p class="auth-intro">This key is the only way back in if the administrator account is ever locked out. It will not be shown again. Write it down and keep it with the Barangay Captain.</p>{% endblock %}
+{% block body %}
+        <div class="recovery-key" aria-label="Recovery key">{{ recovery_key }}</div>
 
-    <h2 style="letter-spacing: 2px; background: #eee; padding: 10px; display: inline-block;">
-        {{ recovery_key }}
-    </h2><br><br>
+        <label class="check-row">
+            <input type="checkbox" id="confirm_saved" data-unlocks="proceedLink">
+            <span>I have written down or printed this key and stored it somewhere safe</span>
+        </label>
 
-    <input type="checkbox" id="confirm_saved" onchange="document.getElementById('proceedBtn').disabled = !this.checked">
-    <label for="confirm_saved">I have written down or printed this key and stored it somewhere safe</label><br><br>
-
-    <a href="/login">
-        <button id="proceedBtn" type="button" disabled>Proceed</button>
-    </a>
-</body>
-</html>
+        <a href="/login" id="proceedLink" class="btn btn-primary btn-block is-disabled" aria-disabled="true" tabindex="-1">Continue to sign in</a>
+{% endblock %}

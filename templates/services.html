@@ -1,264 +1,101 @@
-<!DOCTYPE html>
-<html lang="en">
+{% extends "base.html" %}
+{% from "_macros.html" import icon, badge %}
+{% block title %}Services{% endblock %}
+{% block page_title %}Services{% endblock %}
+{% block page_subtitle %}Service configuration{% endblock %}
+{% block description %}To display the services{% endblock %}
+{% block content %}
+<div class="section-head">
+    <h2>Services Directory</h2>
+    <button type="button" class="btn btn-primary" data-open-modal="add-modal">{{ icon('plus', 18) }} Add service</button>
+</div>
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Services</title>
-</head>
+<section class="card">
+    <h2 class="card-title">Current Offered Services</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Service name</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for service in services %}
+                <tr>
+                    <td class="cell-primary">{{ service.service_name }}</td>
+                    <td>{{ badge(service.service_status) }}</td>
+                    <td>
+                        <div class="row-actions">
+                            <button type="button" class="btn btn-sm btn-outline"
+                                data-edit-service
+                                data-id="{{ service.id }}"
+                                data-name="{{ service.service_name }}"
+                                data-status="{{ service.service_status }}">{{ icon('pencil', 16) }} Edit</button>
+                            <button type="button" class="btn btn-sm btn-danger-outline"
+                                data-confirm
+                                data-action="/services/delete/{{ service.id }}"
+                                data-title="Delete this service?"
+                                data-message="{{ service.service_name }} will be removed from the queue system. If it already has tickets or attendance history, it is set to Inactive instead so those records stay intact."
+                                data-label="Delete service"
+                                data-variant="danger">{{ icon('trash', 16) }} Delete</button>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" class="empty-row">No services yet. Add the first service visitors can queue for.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
 
-<body>
-    <!--SIDEBAR-->
-    <aside>
-        <div class="brand">
-            <div class="brand-icon">
-                <!--Change later-->
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                    class="lucide lucide-shield preview-icon">
-                    <path
-                        d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
-                </svg>
-            </div>
-            <div class="brand-text">
-                <h2>BARANGAY SYSTEM</h2>
-                <p>Barangay 4, San Mateo, Isabela</p>
-            </div>
+{% block dialogs %}
+<!-- ADD SERVICE -->
+<dialog class="modal" id="add-modal">
+    <form action="/services/add" method="post" class="modal-body">
+        <h2>Add service</h2>
+        <p class="modal-text">Define a service residents can line up for. Only active services appear on the registration page.</p>
+        <div class="field">
+            <label for="add-name">Service name</label>
+            <input type="text" name="service_name" id="add-name" placeholder="e.g. Cedula / Community Tax Certificate" required>
         </div>
+        <div class="field">
+            <label for="add-status">Status</label>
+            <select name="service_status" id="add-status">
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+            </select>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-outline" data-close>Cancel</button>
+            <button type="submit" class="btn btn-primary">Add service</button>
+        </div>
+    </form>
+</dialog>
 
-        <!--NAVIGATION-->
-        <nav>
-            <a href="/dashboard" class="active">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-layout-dashboard preview-icon">
-                        <rect width="7" height="9" x="3" y="3" rx="1" />
-                        <rect width="7" height="5" x="14" y="3" rx="1" />
-                        <rect width="7" height="9" x="14" y="12" rx="1" />
-                        <rect width="7" height="5" x="3" y="16" rx="1" />
-                    </svg>
-                </span>
-                <span>Dashboard</span>
-            </a>
-            <a href="/client_registration">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-user-plus preview-icon">
-                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                        <circle cx="9" cy="7" r="4" />
-                        <line x1="19" x2="19" y1="8" y2="14" />
-                        <line x1="22" x2="16" y1="11" y2="11" />
-                    </svg>
-                </span>
-                <span>Client Registration</span>
-            </a>
-            <a href="/queue_management">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-list-ordered preview-icon">
-                        <path d="M11 5h10" />
-                        <path d="M11 12h10" />
-                        <path d="M11 19h10" />
-                        <path d="M4 4h1v5" />
-                        <path d="M4 9h2" />
-                        <path d="M6.5 20H3.4c0-1 2.6-1.925 2.6-3.5a1.5 1.5 0 0 0-2.6-1.02" />
-                    </svg>
-                </span>
-                <span>Queue Management</span>
-            </a>
-            <a href="/attendance">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-calendar preview-icon">
-                        <path d="M8 2v3" />
-                        <path d="M16 2v3" />
-                        <rect x="3" y="3" width="18" height="18" rx="2" />
-                        <path d="M3 9h18" />
-                    </svg>
-                </span>
-                <span>Attendance</span>
-            </a>
-            <a href="/services">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-landmark preview-icon">
-                        <path d="M10 18v-7" />
-                        <path
-                            d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z" />
-                        <path d="M14 18v-7" />
-                        <path d="M18 18v-7" />
-                        <path d="M3 22h18" />
-                        <path d="M6 18v-7" />
-                    </svg>
-                </span>
-                <span>Services</span>
-            </a>
-        </nav>
-
-        <!--MAIN CONTENT-->
-        <main>
-            <!--TOP HEADER-->
-            <header>
-                <div class="header-left">
-                    <h1>Barangay Queue &amp; Service Management</h1>
-                    <span></span>
-                    <p>Service Configurations</p>
-                </div>
-
-                <div class="header-right">
-                    <div class="active-queue">
-                        <p>Active Queue: <span>{{ active_queue_today() }}</span></p>
-                    </div>
-
-                    <div class="profile">
-                        <span>MJ</span>
-                    </div>
-                </div>
-            </header>
-
-            <div class="content-container">
-                <div class="services-directory">
-                    <h2>Services Directory</h2>
-                    <button type="button" class="open-btn"
-                        onclick="document.getElementById('add-modal').showModal()">Add New Service</button>
-                </div>
-
-                <div class="current-services">
-                    <section>
-                        <div class="card-header">
-                            <h2>Current Offered Services</h2>
-                        </div>
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Service Name</th>
-                                        <th>Status</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-
-                                {% for service in services %}
-                                <tbody>
-                                    <tr>
-                                        <td>{{ service.service_name }}</td>
-                                        <td>{{ service.service_status }}</td>
-                                        <td>
-                                            <button type="button"
-                                                onclick="document.getElementById('edit-modal-{{ service.id }}').showModal()">
-                                                Edit</button>
-                                            <button type="button" 
-                                                onclick="document.getElementById('delete-modal-{{ service.id }}').showModal()">
-                                                Delete</button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                                {% else %}
-                                <tbody>
-                                    <tr>
-                                        <td>N/A</td>
-                                        <td>N/A</td>
-                                        <td>
-                                            N/A
-                                        </td>
-                                    </tr>
-                                </tbody>
-                                {% endfor %}
-                            </table>
-                        </div>
-                    </section>
-                </div>
-
-                <!-- ADD SERVICE -->
-                <dialog class="modal" id="add-modal">
-                    <form action="/services/add" method="post">
-                        <h2>Add New Service</h2>
-                        <p class="sub">Define a new service window for the Barangay queue — this determines what
-                            residents
-                            can
-                            line up for.</p>
-                        <hr>
-                        <div class="field">
-                            <label>Service Name</label>
-                            <input type="text" name="service_name" placeholder="e.g. Cedula / Community Tax Certificate"
-                                required>
-                        </div>
-                        <div class="field">
-                            <label>Status</label>
-                            <select name="service_status" id="service_status">
-                                <option value="Active">Active</option>
-                                <option value="Inactive">Inactive</option>
-                            </select>
-                        </div>
-                        <div class="btn-row">
-                            <button class="btn btn-cancel" type="button"
-                                onclick="document.getElementById('add-modal').close()">Cancel</button>
-                            <button class="btn btn-save" type="submit">Add Service</button>
-                        </div>
-                    </form>
-                </dialog>
-
-                <!-- EDIT SERVICE -->
-                {% for service in services %}
-                <dialog class="modal" id="edit-modal-{{ service.id }}">
-                    <form action="/services/edit/{{ service.id }}" method="post">
-                        <h2>Edit Service</h2>
-                        <p class="sub">Update the details of an existing service. Changes apply to new queue tickets
-                            immediately.</p>
-                        <hr>
-                        <div class="field">
-                            <label>Service Name</label>
-                            <input type="text" name="service_name" value="{{ service.service_name}}">
-                        </div>
-                        <div class="field">
-                            <label>Status</label>
-                            <select name="service_status" id="service_status">
-                                <option value="Active" {% if service.service_status=="Active" %}selected{% endif %}>
-                                    Active
-                                </option>
-                                <option value="Inactive" {% if service.service_status=="Inactive" %}selected{% endif %}>
-                                    Inactive
-                                </option>
-                            </select>
-                        </div>
-                        <div class="btn-row">
-                            <button class="btn btn-cancel" type="button"
-                                onclick="document.getElementById('edit-modal-{{ service.id }}').close()">Cancel</button>
-                            <button class="btn btn-save" type="submit">Save Changes</button>
-                        </div>
-                    </form>
-                </dialog>
-                {% endfor %}
-
-                <!-- DELETE SERVICE -->
-                {% for service in services %}
-                <dialog class="modal" id="delete-modal-{{ service.id }}">
-                    <form action="/services/delete/{{ service.id }}" method="post">
-                        <h2>Delete Service?</h2>
-                        <p class="sub">This will permanently remove <strong>{{ service.service_name }}</strong> from the queue system.</p>
-                        <hr>
-                        <div class="warning-box">
-                            ⚠ This action cannot be undone. Any pending tickets for this service will remain in history,
-                            but
-                            residents will no longer be able to queue for it.
-                        </div>
-                        <div class="btn-row">
-                            <button class="btn btn-cancel" type="button"  onclick="document.getElementById('delete-modal-{{ service.id }}').close()">Cancel</button>
-                            <button class="btn btn-delete" type="submit">Delete Service</button>
-                        </div>
-                    </form>
-                </dialog>
-                {% endfor %}
-            </div>
-        </main>
-    </aside>
-
-    <script src="/static/modal.js"></script>
-</body>
-
-</html>
+<!-- EDIT SERVICE (one dialog, filled in by app.js) -->
+<dialog class="modal" id="edit-modal">
+    <form method="post" id="edit-form" class="modal-body">
+        <h2>Edit service</h2>
+        <p class="modal-text">Changes apply to new tickets right away.</p>
+        <div class="field">
+            <label for="edit-name">Service name</label>
+            <input type="text" name="service_name" id="edit-name" required>
+        </div>
+        <div class="field">
+            <label for="edit-status">Status</label>
+            <select name="service_status" id="edit-status">
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+            </select>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-outline" data-close>Cancel</button>
+            <button type="submit" class="btn btn-primary">Save changes</button>
+        </div>
+    </form>
+</dialog>
+{% endblock %}

@@ -1,28 +1,30 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login</title>
-</head>
-<body>
-    <h1>Barangay Queue & Service Management</h1>
-    <h2>Sign In</h2>
+{% extends "auth_base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Sign in{% endblock %}
+{% block badge %}{{ icon('lock', 26) }}{% endblock %}
+{% block eyebrow %}<p class="auth-eyebrow">Staff sign-in</p>{% endblock %}
+{% block heading %}Barangay Queue &amp; Service Management{% endblock %}
+{% block description %}To login the application{% endblock %}
+{% block body %}
+        <form action="/login" method="post" class="form">
+            <div class="field">
+                <label for="username">Username</label>
+                <input type="text" name="username" id="username" autocomplete="username" required autofocus>
+            </div>
 
-    {% if error %}
-    <p style="color: red;">{{ error }}</p>
-    {% endif %}
+            <div class="field">
+                <label for="password">Password</label>
+                <input type="password" name="password" id="password" autocomplete="current-password" data-pw required>
+            </div>
 
-    <form action="/login" method="post">
-        <label>Username</label><br>
-        <input type="text" name="username" required><br><br>
+            <label class="switch-row">
+                <input type="checkbox" class="pw-toggle switch-input">
+                <span class="switch" aria-hidden="true"></span>
+                <span>Show password</span>
+            </label>
 
-        <label>Password</label><br>
-        <input type="password" name="password" required><br><br>
+            <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+        </form>
 
-        <button type="submit">Sign In</button>
-    </form>
-
-    <p><a href="/forgot-password">Forgot Password?</a></p>
-</body>
-</html>
+        <p class="auth-foot"><a href="/forgot-password">Forgot password?</a></p>
+{% endblock %}

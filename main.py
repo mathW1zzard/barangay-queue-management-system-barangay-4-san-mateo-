@@ -1,8 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi import Request 
 from fastapi import Form
+from fastapi import BackgroundTasks
+from fastapi import Depends
+import threading
+import pythoncom
 from fastapi.responses import RedirectResponse
 from database import SessionLocal, Ticket, Service, Visit, Admin
 from datetime import datetime, date, time
@@ -17,6 +21,7 @@ import string
 import bcrypt
 import asyncio
 import math
+import re
 
 # For authentication(recovery key)
 import secrets
@@ -26,7 +31,7 @@ app = FastAPI()
 app.add_middleware(SessionMiddleware, secret_key="replace-this-with-a-random-secret-key")
 templates = Jinja2Templates(directory="templates")
 priority_streak = 0
-
+speech_lock = threading.Lock()
 PAGE_SIZE = 15
 
 def parse_date(value: str):
@@ -50,6 +55,8 @@ def active_queue_today():
         db.close()
         
 templates.env.globals["active_queue_today"] = active_queue_today
+templates.env.globals["barangay_name"] = "Barangay 4, San Mateo, Isabela"
+
 class StatusEnum(str, Enum):
     ACTIVE = "Active"
     INACTIVE = "Inactive"
@@ -87,10 +94,15 @@ def notify_display_update():
     
 # ANNOUNCEMENT AUDIO
 def announce_ticket(ticket_number: str):
-    engine = pyttsx3.init()
-    engine.say(f"Ticket number {ticket_number}, please proceed to the counter")
-    engine.runAndWait()
-
+    with speech_lock:
+        try:
+            pythoncom.CoInitialize()
+            engine = pyttsx3.init()
+            engine.say(f"Ticket number {ticket_number}, please proceed to the counter")
+            engine.runAndWait()
+            engine.stop()
+        except Exception as e:
+            print(f"Announcement failed: {e}")
 
 
 @app.get("/")
@@ -152,7 +164,7 @@ def process_login(request: Request, username: str = Form(...), password: str = F
         return templates.TemplateResponse(request, "login.html", {"error": "Invalid username or password"})
 
     request.session["admin_id"] = admin.id
-    return RedirectResponse(url="/display", status_code=303)
+    return RedirectResponse(url="/dashboard", status_code=303)
 
 
 
@@ -197,10 +209,57 @@ def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/login", status_code=303)
 
-def require_login(request: Request):
+class NotAuthenticated(Exception):
+    pass
+
+
+@app.exception_handler(NotAuthenticated)
+async def not_authenticated_handler(request: Request, exc: NotAuthenticated):
+    return RedirectResponse(url="/login", status_code=303)
+
+
+def login_required(request: Request):
+    """Use as dependencies=[Depends(login_required)] on every staff-only route."""
     if "admin_id" not in request.session:
-        return RedirectResponse(url="/login", status_code=303)
-    return None
+        raise NotAuthenticated()
+
+
+@app.get("/change-password", dependencies=[Depends(login_required)])
+def show_change_password(request: Request):
+    return templates.TemplateResponse(request, "change_password.html", {})
+
+
+@app.post("/change-password", dependencies=[Depends(login_required)])
+def process_change_password(
+    request: Request,
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    confirm_password: str = Form(...),
+):
+    db = SessionLocal()
+    try:
+        admin = db.query(Admin).filter(Admin.id == request.session["admin_id"]).first()
+        if not admin:
+            request.session.clear()
+            return RedirectResponse(url="/login", status_code=303)
+
+        error = None
+        if not bcrypt.checkpw(current_password.encode(), admin.password_hash.encode()):
+            error = "Current password is incorrect"
+        elif new_password != confirm_password:
+            error = "New passwords do not match"
+        elif len(new_password) < 8:
+            error = "Password must be at least 8 characters"
+
+        if error:
+            return templates.TemplateResponse(request, "change_password.html", {"error": error})
+
+        admin.password_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+        db.commit()
+    finally:
+        db.close()
+
+    return templates.TemplateResponse(request, "change_password.html", {"success": "Password updated."})
 
 def generate_recovery_key():
     """Generates a key like BQS-7F3K-9D2M-XQ1R"""
@@ -218,8 +277,21 @@ def get_current_admin(request: Request):
     db.close()
     return admin
 
+def admin_initials(request: Request):
+    """Two-letter avatar text from the signed-in username (e.g. admin.secretary -> AS)."""
+    admin = get_current_admin(request)
+    if not admin or not admin.username:
+        return "AD"
+    parts = [p for p in re.split(r"[._\s-]+", admin.username) if p]
+    if len(parts) >= 2:
+        return (parts[0][0] + parts[1][0]).upper()
+    return admin.username[:2].upper()
+
+
+templates.env.globals["admin_initials"] = admin_initials
+
 @app.get("/dashboard")
-def show_dashboard(request: Request, announce: str = ""):
+def show_dashboard(request: Request):
     db = SessionLocal()
     tickets = db.query(Ticket).all()
     services = db.query(Service).all()
@@ -291,53 +363,99 @@ def show_dashboard(request: Request, announce: str = ""):
         "no_show_count": no_show_count,
         "tickets": tickets,
         "services": services,
-        "service_volume": service_volume,
-        "announce": announce,
+        "service_volume": service_volume    
     })
     db.close()
     return response
 
-@app.get("/client_registration")
-def show_registration(request: Request):
+@app.get("/client_registration", dependencies=[Depends(login_required)])
+def show_registration(request: Request, ticket: str = ""):
     db = SessionLocal()
     tickets = db.query(Ticket).all()
-    services = db.query(Service).all()
+    services = db.query(Service).filter(Service.service_status == "Active").all()
     
     today_start = datetime.combine(date.today(), datetime.min.time())
     
     total_today = db.query(Ticket).filter(Ticket.created_at >= today_start).count()
     
+    # After /register redirects here with ?ticket=P-004, show that ticket's slip
+    new_ticket = None
+    if ticket:
+        new_ticket = db.query(Ticket).filter(
+            Ticket.ticket_number == ticket, Ticket.created_at >= today_start
+        ).first()
+
+
     response =  templates.TemplateResponse(request, "client_registration.html", {
         "tickets": tickets,
         "services": services,
-        "total_today": total_today
+        "total_today": total_today,
+        "new_ticekt": new_ticket
     })
     db.close()
     return response
 
-@app.post("/register")
-def register_ticket(citizen_name: str =  Form(...), lane: str = Form(...), service_id: int = Form(...)):
+@app.post("/register", dependencies=[Depends(login_required)])
+def register_ticket(request: Request, citizen_name: str =  Form(...), lane: str = Form(...), service_id: int = Form(...)):
     db = SessionLocal()
     
+    service = db.query(Service).filter(Service.id == service_id, Service.service_status == "Active").first()
     today_start = datetime.combine(date.today(), datetime.min.time()) # start at 00:00:00 for today
     
-    active_today = db.query(Ticket).filter(Ticket.lane == lane, Ticket.created_at >= today_start).count()
-    archive_today = db.query(Visit).filter(Visit.lane == lane, Visit.created_at >= today_start).count()
+    used_numbers = [
+        row[0] for row in db.query(Ticket.ticket_number)
+        .filter(Ticket.lane == lane, Ticket.created_at >= today_start).all()
+    ] + [
+        row[0] for row in db.query(Visit.ticket_number)
+        .filter(Visit.lane == lane, Visit.created_at >= today_start).all()
+    ]
     
-    
-    new_ticket_number = f"{lane}-{active_today + archive_today + 1:03d}"
+    new_ticket_number = next_ticket_number(lane, used_numbers)
+
+    if service is None:
+        db.close()
+        raise HTTPException(status_code=400, detail="Selected services is unavailable.")
 
     new_ticket = Ticket(citizen_name=citizen_name, lane=lane, service_id=service_id, ticket_number=new_ticket_number, created_at=datetime.now())
+    response = templates.TemplateResponse(request, "ticket_confirmation.html", {
+        "ticket_number": new_ticket.ticket_number,
+        "citizen_name": new_ticket.citizen_name,
+        "lane": new_ticket.lane,
+        "service_name": service.service_name if service else "",
+    })
     db.add(new_ticket)
     db.commit()
     db.close()
     
+    return response
+
+def next_ticket_number(lane: str, used_numbers):
+    """Next number for a lane, e.g. R-004, given every number already used today."""
+    highest = 0
+    for number in used_numbers:
+        try:
+            highest = max(highest, int(str(number).split("-")[-1]))
+        except ValueError:
+            continue
+    return f"{lane}-{highest + 1:03d}"
+
+
+@app.post("/tickets/delete/{ticket_id}", dependencies=[Depends(login_required)])
+def delete_ticket(ticket_id: int):
+    """Remove a ticket from the live queue. Nothing is written to attendance history."""
+    db = SessionLocal()
+    try:
+        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+        if ticket:
+            db.delete(ticket)
+            db.commit()
+    finally:
+        db.close()
     return RedirectResponse(url="/client_registration", status_code=303)
 
-
 # QUEUE MANAGEMENT
-@app.get("/queue_management")
-def show_queue(request: Request, announce: str = ""):
+@app.get("/queue_management", dependencies=[Depends(login_required)])
+def show_queue(request: Request):
     db = SessionLocal()
     tickets = db.query(Ticket).all()
     services = db.query(Service).all()
@@ -365,7 +483,6 @@ def show_queue(request: Request, announce: str = ""):
         "called_count": called_count,
         "skipped_count": skipped_count,
         "current_ticket": current_ticket,
-        "announce": announce,
         "upcomming": upcomming
     })
     db.close()
@@ -373,8 +490,8 @@ def show_queue(request: Request, announce: str = ""):
 
 
 # LIVE PANEL
-@app.post("/call-next")
-def call_next():
+@app.post("/call-next", dependencies=[Depends(login_required)])
+def call_next(background_tasks: BackgroundTasks):
     global priority_streak
     db = SessionLocal()
     try:
@@ -397,12 +514,13 @@ def call_next():
 
         next_ticket.status = "called"
         next_ticket.called_at = datetime.now()
-        announce = next_ticket.ticket_number
+        number = next_ticket.ticket_number
         db.commit()
+        background_tasks.add_task(announce_ticket, number)
     finally:
         db.close()
 
-    return RedirectResponse(url=f"/queue_management?announce={announce}", status_code=303)
+    return RedirectResponse(url="/queue_management", status_code=303)
 
 def archive_ticket(ticket_id : int, final_status : str):
     """Shared helper: mark a ticket finished and create its permanent Visit record."""
@@ -464,7 +582,7 @@ def get_incoming_order(limit: int = 3):
     return upcoming
     
 
-@app.post("/skip/{ticket_id}")
+@app.post("/skip/{ticket_id}", dependencies=[Depends(login_required)])
 def skip_ticket(ticket_id: int):
     db = SessionLocal()
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
@@ -475,25 +593,26 @@ def skip_ticket(ticket_id: int):
     return RedirectResponse(url="/queue_management", status_code=303)
 
 
-@app.post("/recall/{ticket_id}")
-def recall_ticket(ticket_id: int):
+@app.post("/recall/{ticket_id}", dependencies=[Depends(login_required)])
+def recall_ticket(ticket_id: int, background_tasks: BackgroundTasks):
     db = SessionLocal()
-    
-    if db.query(Ticket).filter(Ticket.status == "called").first():
+    try:
+        if db.query(Ticket).filter(Ticket.status == "called").first():
+            return RedirectResponse(url="/queue_management", status_code=303)
+        
+        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+        if ticket and ticket.status == "skipped":
+            ticket.status = "called"
+            ticket.called_at = datetime.now()  
+            number = ticket.ticket_number
+            db.commit()
+            background_tasks.add_task(announce_ticket, number)
+    finally:
         db.close()
-        return RedirectResponse(url="/queue_management", status_code=303)
-    
-    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
-    announce = ""
-    if ticket:
-        ticket.status = "called"
-        ticket.called_at = datetime.now()  
-        announce = ticket.ticket_number
-        db.commit()
-    db.close()
-    return RedirectResponse(url=f"/queue_management?announce={announce}", status_code=303)
+        
+    return RedirectResponse(url="/queue_management", status_code=303)
 
-@app.post("/complete/{ticket_id}")
+@app.post("/complete/{ticket_id}", dependencies=[Depends(login_required)])
 def complete_ticket(ticket_id: int):
     archive_ticket(ticket_id, "completed")
     db = SessionLocal()
@@ -507,7 +626,7 @@ def complete_ticket(ticket_id: int):
     return RedirectResponse(url="/queue_management", status_code=303)
 
 
-@app.post("/no-show/{ticket_id}")
+@app.post("/no-show/{ticket_id}", dependencies=[Depends(login_required)])
 def no_show_ticket(ticket_id: int):
     archive_ticket(ticket_id, "no_show")   # reuses your existing archive helper - permanent
     db = SessionLocal()
@@ -521,7 +640,7 @@ def no_show_ticket(ticket_id: int):
     return RedirectResponse(url="/queue_management", status_code=303)
 
 
-@app.get("/attendance")
+@app.get("/attendance", dependencies=[Depends(login_required)])
 def show_attendance(
     request: Request,
     date_from: str = "",
@@ -614,7 +733,7 @@ def apply_visit_filters(query, d_from, d_to, lane, service_id, q):
     return query
 
 
-@app.get("/attendance/print")
+@app.get("/attendance/print", dependencies=[Depends(login_required)])
 def attendance_print(request: Request, date_from: str = "", date_to: str = "", lane: str = "", service_id: str = "", q: str = ""):
     
     service_id_int = int(service_id) if service_id else None
@@ -664,7 +783,7 @@ def attendance_print(request: Request, date_from: str = "", date_to: str = "", l
         
         
 # SERVICE
-@app.get("/services")
+@app.get("/services", dependencies=[Depends(login_required)])
 def list_services(request: Request):
     db = SessionLocal()
     services = db.query(Service).all()
@@ -679,7 +798,7 @@ def list_services(request: Request):
     db.close()
     return response
 
-@app.post("/services/add")
+@app.post("/services/add", dependencies=[Depends(login_required)])
 def add_services(service_name: str = Form(...), service_status: StatusEnum = Form(alias="service_status")):
     db = SessionLocal()
     new_service = Service(service_name=service_name, service_status=service_status)
@@ -688,7 +807,7 @@ def add_services(service_name: str = Form(...), service_status: StatusEnum = For
     db.close()
     return RedirectResponse(url="/services", status_code=303)
 
-@app.post("/services/edit/{service_id}")
+@app.post("/services/edit/{service_id}", dependencies=[Depends(login_required)])
 def edit_service(service_id: int, service_name: str = Form(...), service_status: StatusEnum = Form(alias="service_status")):
     db = SessionLocal()
     service = db.query(Service).filter(Service.id == service_id).first()
@@ -700,13 +819,23 @@ def edit_service(service_id: int, service_name: str = Form(...), service_status:
     db.close()
     return RedirectResponse(url="/services", status_code=303)
 
-@app.post("/services/delete/{service_id}")
+@app.post("/services/delete/{service_id}", dependencies=[Depends(login_required)])
 def delete_service(service_id: int):
     db = SessionLocal()
-    service = db.query(Service).filter(Service.id == service_id).first()
-    
-    if service:
-        db.delete(service)
-        db.commit()
-    db.close()
+    try:
+        service = db.query(Service).filter(Service.id == service_id).first()
+
+        if service:
+            has_history = (
+                db.query(Ticket).filter(Ticket.service_id == service_id).first() is not None
+                or db.query(Visit).filter(Visit.service_id == service_id).first() is not None
+            )
+            if has_history:
+                # Old tickets and visits still point at this service, so keep the row
+                service.service_status = "Inactive"
+            else:
+                db.delete(service)
+            db.commit()
+    finally:
+        db.close()
     return RedirectResponse(url="/services", status_code=303)

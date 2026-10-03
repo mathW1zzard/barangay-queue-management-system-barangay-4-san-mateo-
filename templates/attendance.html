@@ -1,264 +1,100 @@
-<!DOCTYPE html>
-<html lang="en">
+{% extends "base.html" %}
+{% from "_macros.html" import icon, badge, lane_tag %}
+{% block title %}Attendance{% endblock %}
+{% block page_title %}Attendance{% endblock %}
+{% block page_subtitle %}History and logs{% endblock %}
+{% block description %}Saved ticket on Visit model{% endblock %}
+{% block content %}
+{# One encoded query string, shared by the print link and the pagination links #}
+{% set qs = {'date_from': date_from, 'date_to': date_to, 'lane': lane, 'service_id': service_id or '', 'q': search}|urlencode %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Attendance</title>
-</head>
+<section class="card">
+    <div class="section-head">
+        <h2>Client Attendance</h2>
+        <a class="btn btn-outline" target="_blank" rel="noopener" href="/attendance/print?{{ qs }}">{{ icon('printer', 18) }} Print attendance</a>
+    </div>
 
-<body>
-    <!--SIDEBAR-->
-    <aside>
-        <div class="brand">
-            <div class="brand-icon">
-                <!--Change later-->
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                    class="lucide lucide-shield preview-icon">
-                    <path
-                        d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
-                </svg>
-            </div>
-            <div class="brand-text">
-                <h2>BARANGAY SYSTEM</h2>
-                <p>Barangay 4, San Mateo, Isabela</p>
-            </div>
+    <!--FILTERS-->
+    <form id="filter-form" method="get" action="/attendance" class="filters">
+        <div class="field">
+            <label for="date_from">From date</label>
+            <input type="date" name="date_from" id="date_from" value="{{ date_from }}">
         </div>
+        <div class="field">
+            <label for="date_to">To date</label>
+            <input type="date" name="date_to" id="date_to" value="{{ date_to }}">
+        </div>
+        <div class="field">
+            <label for="lane">Client type</label>
+            <select name="lane" id="lane">
+                <option value="" {{ "selected" if not lane }}>All types</option>
+                <option value="P" {{ "selected" if lane == "P" }}>Priority</option>
+                <option value="R" {{ "selected" if lane == "R" }}>Regular</option>
+            </select>
+        </div>
+        <div class="field">
+            <label for="service_id">Requested service</label>
+            <select name="service_id" id="service_id">
+                <option value="">All services</option>
+                {% for service in services %}
+                <option value="{{ service.id }}" {{ "selected" if service_id == service.id }}>{{ service.service_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field field-grow">
+            <label for="search-client">Search</label>
+            <input type="search" name="q" id="search-client" placeholder="Name or ticket number" value="{{ search }}" autocomplete="off">
+        </div>
+    </form>
 
-        <!--NAVIGATION-->
-        <nav>
-            <a href="/dashboard" class="active">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-layout-dashboard preview-icon">
-                        <rect width="7" height="9" x="3" y="3" rx="1" />
-                        <rect width="7" height="5" x="14" y="3" rx="1" />
-                        <rect width="7" height="9" x="14" y="12" rx="1" />
-                        <rect width="7" height="5" x="3" y="16" rx="1" />
-                    </svg>
-                </span>
-                <span>Dashboard</span>
-            </a>
-            <a href="/client_registration">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-user-plus preview-icon">
-                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                        <circle cx="9" cy="7" r="4" />
-                        <line x1="19" x2="19" y1="8" y2="14" />
-                        <line x1="22" x2="16" y1="11" y2="11" />
-                    </svg>
-                </span>
-                <span>Client Registration</span>
-            </a>
-            <a href="/queue_management">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-list-ordered preview-icon">
-                        <path d="M11 5h10" />
-                        <path d="M11 12h10" />
-                        <path d="M11 19h10" />
-                        <path d="M4 4h1v5" />
-                        <path d="M4 9h2" />
-                        <path d="M6.5 20H3.4c0-1 2.6-1.925 2.6-3.5a1.5 1.5 0 0 0-2.6-1.02" />
-                    </svg>
-                </span>
-                <span>Queue Management</span>
-            </a>
-            <a href="/attendance">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-calendar preview-icon">
-                        <path d="M8 2v3" />
-                        <path d="M16 2v3" />
-                        <rect x="3" y="3" width="18" height="18" rx="2" />
-                        <path d="M3 9h18" />
-                    </svg>
-                </span>
-                <span>Attendance</span>
-            </a>
-            <a href="/services">
-                <span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-landmark preview-icon">
-                        <path d="M10 18v-7" />
-                        <path
-                            d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z" />
-                        <path d="M14 18v-7" />
-                        <path d="M18 18v-7" />
-                        <path d="M3 22h18" />
-                        <path d="M6 18v-7" />
-                    </svg>
-                </span>
-                <span>Services</span>
-            </a>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Ticket</th>
+                    <th>Client name</th>
+                    <th>Type</th>
+                    <th>Service</th>
+                    <th>Time in</th>
+                    <th>Time out</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in visits %}
+                <tr>
+                    <td>{{ v.created_at.strftime('%m/%d/%Y') }}</td>
+                    <td class="cell-primary">{{ v.ticket_number }}</td>
+                    <td class="cell-primary">{{ v.citizen_name }}</td>
+                    <td>{{ lane_tag(v.lane) }}</td>
+                    <td>{{ v.service.service_name if v.service else 'Removed service' }}</td>
+                    <td>{{ v.called_at.strftime('%I:%M %p') if v.called_at else '--' }}</td>
+                    <td>{{ v.completed_at.strftime('%I:%M %p') if v.completed_at else '--' }}</td>
+                    <td>{{ badge(v.final_status) }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="empty-row">No records match these filters.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pagination-row">
+        <p class="record-count">
+            {% if total_records > 0 %}Showing {{ start_record }} to {{ end_record }} of {{ total_records }} records{% else %}No records{% endif %}
+        </p>
+        <nav class="pagination" aria-label="Pages">
+            <a class="page-btn{{ ' disabled' if page <= 1 }}" href="/attendance?{{ qs }}&page={{ page - 1 if page > 1 else 1 }}">Previous</a>
+            {% for p in range(1, total_pages + 1) %}
+                {% if p == 1 or p == total_pages or (p - page)|abs <= 2 %}
+                <a class="page-btn{{ ' active' if p == page }}" href="/attendance?{{ qs }}&page={{ p }}"{% if p == page %} aria-current="page"{% endif %}>{{ p }}</a>
+                {% elif (p - page)|abs == 3 %}
+                <span class="page-gap">&hellip;</span>
+                {% endif %}
+            {% endfor %}
+            <a class="page-btn{{ ' disabled' if page >= total_pages }}" href="/attendance?{{ qs }}&page={{ page + 1 if page < total_pages else total_pages }}">Next</a>
         </nav>
-
-        <!--MAIN CONTENT-->
-        <main>
-            <!--TOP HEADER-->
-            <header>
-                <div class="header-left">
-                    <h1>Barangay Queue &amp; Service Management</h1>
-                    <span></span>
-                    <p>Attendance History &amp; Logs</p>
-                </div>
-
-                <div class="header-right">
-                    <div class="active-queue">
-                        <p>Active Queue: <span>{{ active_queue_today() }}</span></p>
-                    </div>
-
-                    <div class="profile">
-                        <span>MJ</span>
-                    </div>
-                </div>
-            </header>
-
-            <div class="content-container">
-                <section class="client-attendance">
-                    <div class="content-header-row">
-                        <h2>Client Attendance</h2>
-                        <a class="btn-print" target="_blank" rel="noopener"
-                            href="/attendance/print?date_from={{ date_from }}&date_to={{ date_to }}&lane={{ lane }}&service_id={{ service_id or '' }}&q={{ search }}">Print
-                            Attendance</a>
-                    </div>
-
-                    <!--FILTER CONTAINER-->
-                    <form id="filter-form" method="get" action="/attendance" class="filter-container">
-                        <div class="filter-group">
-                            <label for="date_from">From Date:</label>
-                            <input type="date" name="date_from" id="date_from" value="{{ date_from }}">
-                        </div>
-                        <div class="filter-group">
-                            <label for="date_to">To Date:</label>
-                            <input type="date" name="date_to" id="date_to" value="{{ date_to }}">
-                        </div>
-
-                        <!--CLLIENT TYPE-->
-                        <div class="filter-group">
-                            <label for="lane">Client Type:</label>
-                            <select name="lane" id="lane">
-                                <option value="" {{ "selected" if not lane }}>All Types</option>
-                                <option value="P" {{ "selected" if lane=="P" }}>Priority</option>
-                                <option value="R" {{ "selected" if lane=="R" }}>Regular</option>
-                            </select>
-                        </div>
-
-                        <!--REQUESTED SERVICES-->
-                        <div class="filter-group">
-                            <label for="services">Requested Services:</label>
-                            <select name="service_id" id="service_id">
-                                <option value="">All Lanes</option>
-                                {% for service in services %}
-                                <option value="{{ service.id }}" {{ "selected" if service_id==service.id }}>
-                                    {{ service.service_name }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-
-                        <!--SEARCH -->
-                        <div class="filter-group">
-                            <label for="search-client">Client Type:</label>
-                            <input type="search" name="q" id="search-client" placeholder="Type name or ticket..."
-                                value="{{ search }}">
-                        </div>
-
-                    </form>
-                </section>
-
-                <section>
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Ticket#</th>
-                                    <th>Client Name</th>
-                                    <th>Type</th>
-                                    <th>Service</th>
-                                    <th>Time in</th>
-                                    <th>Time out</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for v in visits %}
-                                <tr>
-                                    <td>{{ v.created_at.strftime('%m/%d/%Y') }}</td>
-                                    <td>{{ v.ticket_number }}</td>
-                                    <td>{{ v.citizen_name }}</td>
-                                    <td>{% if v.lane == "P" %}Priority{% else %}Regular{% endif %}</td>
-                                    <td>{{ v.service.service_name }}</td>
-                                    <td>{{ v.called_at.strftime('%I:%M %p') if v.called_at else '--' }}</td>
-                                    <td>{{ v.completed_at.strftime('%I:%M %p') if v.completed_at else '--' }}</td>
-                                    <td class="status status-{{ v.final_status }}">
-                                        {{ "No Show" if v.final_status == "no_show" else "Completed" }}
-                                    </td>
-                                </tr>
-                                {% else %}
-                                <tr>
-                                    <td colspan="8" class="empty-row">No records match these filters.</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-
-                        <div class="pagination-row">
-                            <p class="record-count">
-                                {% if total_records > 0 %}
-                                Showing {{ start_record }} to {{ end_record }} of {{ total_records }} records
-                                {% else %}
-                                No records
-                                {% endif %}
-                            </p>
-
-                            <div class="pagination">
-                                {% set qs = "date_from=" + date_from + "&date_to=" + date_to + "&lane=" + lane +
-                                "&service_id=" + (service_id|string if service_id else "") + "&q=" + search %}
-
-                                <a class="page-btn {{ 'disabled' if page <= 1 }}"
-                                    href="/attendance?{{ qs }}&page={{ page - 1 if page > 1 else 1 }}">Previous</a>
-
-                                {% for p in range(1, total_pages + 1) %}
-                                <a class="page-btn {{ 'active' if p == page }}"
-                                    href="/attendance?{{ qs }}&page={{ p }}">
-                                    {{ p }}
-                                </a>
-                                {% endfor %}
-
-                                <a class="page-btn {{ 'disabled' if page >= total_pages }}"
-                                    href="/attendance?{{ qs }}&page={{ page + 1 if page < total_pages else total_pages }}">Next</a>
-                            </div>
-                        </div>
-                </section>
-            </div>
-        </main>
-    </aside>
-
-    <script>
-        // Auto-submit on every filter change, so the table updates without a
-        // separate "Apply" button. Covers both date inputs and both selects.
-        const form = document.getElementById('filter-form');
-        form.querySelectorAll('input[type="date"], select').forEach(el => {
-            el.addEventListener('change', () => form.submit());
-        });
-
-        // Search box waits 400ms after typing stops before submitting.
-        const search = document.getElementById('search-client');
-        let searchTimer;
-        search.addEventListener('input', () => {
-            clearTimeout(searchTimer);
-            searchTimer = setTimeout(() => form.submit(), 400);
-        });
-    </script>
-</body>
-
-</html>
+    </div>
+</section>
+{% endblock %}

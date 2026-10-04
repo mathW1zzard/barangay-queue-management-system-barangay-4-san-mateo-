@@ -5,10 +5,9 @@ from fastapi import Request
 from fastapi import Form
 from fastapi import BackgroundTasks
 from fastapi import Depends
-import threading
-import pythoncom
 from fastapi.responses import RedirectResponse
 from database import SessionLocal, Ticket, Service, Visit, Admin
+from paths import resource_path, data_path
 from datetime import datetime, date, time
 from starlette.middleware.sessions import SessionMiddleware
 from enum import Enum
@@ -16,7 +15,6 @@ from fastapi import WebSocket, WebSocketDisconnect
 from escpos.printer import Dummy
 from collections import Counter
 from sqlalchemy import desc
-import pyttsx3
 import secrets
 import string
 import bcrypt
@@ -30,9 +28,8 @@ import string
 
 app = FastAPI()
 app.add_middleware(SessionMiddleware, secret_key="replace-this-with-a-random-secret-key")
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=resource_path("templates"))
 priority_streak = 0
-speech_lock = threading.Lock()
 PAGE_SIZE = 15
 
 def parse_date(value: str):
@@ -63,7 +60,7 @@ class StatusEnum(str, Enum):
     ACTIVE = "Active"
     INACTIVE = "Inactive"
     
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=resource_path("static")), name="static")
 
 # WEBSOCKET
 class ConnectionManager:
@@ -162,7 +159,7 @@ def print_ticket(ticket_number: str, citizen_name: str, service_name: str, lane:
 
         # Dummy doesn't print; save what WOULD be printed so it can be inspected.
         if isinstance(printer, Dummy):
-            with open("last_ticket_printed.txt", "wb") as f:
+            with open(data_path("last_ticket_printed.txt"), "wb") as f:
                 f.write(printer.output)
             print("Ticket sent to (dummy) printer - check last_ticket_printed.txt")
         return True

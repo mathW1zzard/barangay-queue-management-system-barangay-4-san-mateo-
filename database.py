@@ -1,15 +1,19 @@
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from datetime import datetime
+from pathlib import Path
+
+from paths import data_path
 
 # Connect to sqlite called tickets.db (automatic create database)
-engine = create_engine("sqlite:///barangay_system.db")
+# Development: the project folder. Packaged app: %LOCALAPPDATA%\BarangayQueue (see paths.py)
+engine = create_engine(f"sqlite:///{Path(data_path('barangay_system.db')).as_posix()}")
 
 # Base class that all our table models will inherit from
 Base = declarative_base()
 
 # Creates usable session
-SessionLocal = sessionmaker(bind=engine )
+SessionLocal = sessionmaker(bind=engine)
 
 # Services
 class Service(Base):        

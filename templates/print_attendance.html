@@ -13,6 +13,7 @@
             --muted: #6b7690;
             --line: #dfe3ec;
             --green: #16a34a;
+            --light-gray: #F3F4F6;
         }
 
         * {
@@ -61,6 +62,19 @@
             outline-offset: 2px;
         }
 
+        /* ---------- Back Button ---------- */
+
+        .btn-back{
+            background: var(--light-gray);
+            color:#000080;
+            border: 0;
+            border-radius: 6px;
+            padding: 8px 18px;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+
+        }
         /* ---------- Report (fluid - fills whatever paper size prints) ---------- */
         .page {
             width: 100%;
@@ -211,6 +225,7 @@
 
         /* ---------- Print ---------- */
         @media print {
+
             /*
                 No `size:` here on purpose - leaving it out means the
                 browser uses whatever paper the user picks in their own
@@ -253,6 +268,9 @@
     <div class="toolbar">
         <div class="filters-text">{{ filters_text }} ({{ total_rows }} record{{ '' if total_rows == 1 else 's' }})
         </div>
+        <form action="/attendance" method="get">
+            <button type="submit" class="btn-back">Return to Attendance</button>
+        </form>
         <button type="button" class="btn-print" onclick="window.print()">Print</button>
     </div>
 

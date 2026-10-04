@@ -6,7 +6,7 @@ rmdir /s /q build 2>nul
 rmdir /s /q dist 2>nul
 
 echo Building...
-pyinstaller --noconfirm --clean BarangayQueue.spec
+pyinstaller --noconfirm --clean BarangayQueueManagement.spec
 if errorlevel 1 (
     echo.
     echo BUILD FAILED - read the messages above.

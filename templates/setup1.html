@@ -1,18 +1,36 @@
 {% extends "auth_base.html" %}
 {% from "_macros.html" import icon %}
-{% block title %}Set up - Step 2 of 2{% endblock %}
-{% block badge %}{{ icon('key', 26) }}{% endblock %}
-{% block eyebrow %}<p class="step-indicator">First-time setup &middot; Step 2 of 2</p>{% endblock %}
-{% block heading %}Save your recovery key{% endblock %}
-{% block description %}2nd step to create a new account{% endblock %}
-{% block intro %}<p class="auth-intro">This key is the only way back in if the administrator account is ever locked out. It will not be shown again. Write it down and keep it with the Barangay Captain.</p>{% endblock %}
+{% block title %}Set up - Step 1 of 2{% endblock %}
+{% block badge %}{{ icon('user-plus', 26) }}{% endblock %}
+{% block eyebrow %}<p class="step-indicator">First-time setup &middot; Step 1 of 2</p>{% endblock %}
+{% block heading %}Create your account{% endblock %}
+{% block description %}1st step to create a new account{% endblock %}
+{% block intro %}<p class="auth-intro">This will be the only account for this system. Choose a username and password you'll remember.</p>{% endblock %}
 {% block body %}
-        <div class="recovery-key" aria-label="Recovery key">{{ recovery_key }}</div>
+        <form action="/setup" method="post" class="form">
+            <div class="field">
+                <label for="username">Username</label>
+                <input type="text" name="username" id="username" placeholder="admin.secretary" autocomplete="username" required autofocus>
+            </div>
 
-        <label class="check-row">
-            <input type="checkbox" id="confirm_saved" data-unlocks="proceedLink">
-            <span>I have written down or printed this key and stored it somewhere safe</span>
-        </label>
+            <div class="field">
+                <label for="password">Password</label>
+                <input type="password" name="password" id="password" autocomplete="new-password" data-pw required>
+            </div>
 
-        <a href="/login" id="proceedLink" class="btn btn-primary btn-block is-disabled" aria-disabled="true" tabindex="-1">Continue to sign in</a>
+            <div class="field">
+                <label for="confirm_password">Confirm password</label>
+                <input type="password" name="confirm_password" id="confirm_password" autocomplete="new-password" data-pw required>
+            </div>
+
+            <label class="switch-row">
+                <input type="checkbox" class="pw-toggle switch-input">
+                <span class="switch" aria-hidden="true"></span>
+                <span>Show password</span>
+            </label>
+
+            <p class="hint">Use at least 8 characters. This password protects all client records.</p>
+
+            <button type="submit" class="btn btn-primary btn-block">Continue</button>
+        </form>
 {% endblock %}

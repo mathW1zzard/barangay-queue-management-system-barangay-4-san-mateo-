@@ -1382,57 +1382,138 @@ tbody tr:hover .empty-row {
     margin-top: 4px;
 }
 
-.modal-slip {
-    max-width: 480px;
+/* ---------------------------------------------------------------- ticket confirmation + queue slip */
+.confirm-page {
+    display: flex;
+    justify-content: center;
 }
 
-.modal-slip .modal-actions {
-    justify-content: center;
+.confirm-card {
+    width: 100%;
+    max-width: 460px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 28px;
+}
+
+.confirm-status {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: var(--radius-btn);
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.confirm-status .icon {
+    margin-top: 1px;
+}
+
+.confirm-status strong {
+    display: block;
+    font-weight: 800;
+}
+
+.confirm-status span {
+    display: block;
+    font-weight: 500;
+}
+
+.confirm-status-ok {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: var(--green-dark);
+}
+
+.confirm-status-warn {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #b45309;
 }
 
 .ticket-slip {
     text-align: center;
-    border: 2px dashed var(--faint);
-    border-radius: 18px;
-    padding: 24px 20px;
+    background: #fafbfc;
+    border: 2px dashed var(--muted);
+    border-radius: 16px;
+    padding: 28px 24px 24px;
 }
 
 .ticket-slip hr {
     border: 0;
-    border-top: 1px dashed var(--faint);
-    margin: 14px 0;
+    border-top: 1px solid var(--line);
+    margin: 18px 0;
 }
 
 .ticket-org {
     font-size: 14px;
     font-weight: 800;
     letter-spacing: .06em;
+    color: var(--navy);
 }
 
 .ticket-sub {
     font-size: 13px;
     color: var(--muted);
+    margin-top: 2px;
 }
 
 .ticket-number {
-    font-size: 64px;
+    font-size: 72px;
     font-weight: 800;
-    line-height: 1.1;
+    line-height: 1.05;
     letter-spacing: -.02em;
-    margin-bottom: 8px;
+    color: var(--navy-deep);
+    margin-bottom: 12px;
+}
+
+.ticket-lane {
+    display: inline-block;
+    padding: 5px 16px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.ticket-lane-priority {
+    background: var(--orange-soft);
+    color: var(--orange-dark);
+}
+
+.ticket-lane-regular {
+    background: #f1f5f9;
+    color: var(--muted);
+}
+
+.slip-details {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
 
 .slip-row {
     display: flex;
     justify-content: space-between;
+    align-items: baseline;
     gap: 16px;
     text-align: left;
     font-size: 14px;
-    padding: 4px 0;
-    color: var(--muted);
 }
 
-.slip-row strong {
+.slip-row dt {
+    color: var(--muted);
+    flex: none;
+}
+
+.slip-row dd {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
     color: var(--text);
     text-align: right;
 }
@@ -1440,6 +1521,12 @@ tbody tr:hover .empty-row {
 .ticket-note {
     font-size: 13px;
     color: var(--muted);
+}
+
+.confirm-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 
 /* ---------------------------------------------------------------- sign-in / setup */
@@ -1613,28 +1700,34 @@ tbody tr:hover .empty-row {
 }
 
 /* ---------------------------------------------------------------- printing the ticket slip */
+/* Printing from the browser (Ctrl+P) shows only the slip: no sidebar, top bar or buttons. */
 @media print {
-    body.print-slip {
+    body {
         background: #fff;
     }
 
-    body.print-slip .shell,
-    body.print-slip .no-print,
-    body.print-slip #confirm-dialog {
+    .sidebar,
+    .topbar,
+    .no-print,
+    #confirm-dialog {
         display: none !important;
     }
 
-    body.print-slip dialog#ticket-dialog {
-        position: static;
-        transform: none;
-        box-shadow: none;
-        animation: none;
-        width: 80mm;
-        max-width: none;
-        margin: 0;
+    .main {
+        margin-left: 0;
     }
 
-    body.print-slip .modal-body {
+    .content {
         padding: 0;
+    }
+
+    .confirm-card {
+        max-width: 80mm;
+        padding: 0;
+        box-shadow: none;
+    }
+
+    .ticket-slip {
+        background: #fff;
     }
 }

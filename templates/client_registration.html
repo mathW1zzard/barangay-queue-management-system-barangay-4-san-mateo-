@@ -98,31 +98,3 @@
 </section>
 {% endblock %}
 
-{% block dialogs %}
-{% if new_ticket %}
-<dialog id="ticket-dialog" class="modal modal-slip" data-autoopen="true">
-    <div class="modal-body">
-        <div class="ticket-slip" id="ticket-slip">
-            <p class="ticket-org">{{ barangay_name|upper }}</p>
-            <p class="ticket-sub">Official queue slip</p>
-            <hr>
-            <p class="ticket-number">{{ new_ticket.ticket_number }}</p>
-            <span class="tag {{ 'tag-priority' if new_ticket.lane == 'P' else 'tag-regular' }} tag-lg">{{ 'Priority
-                lane' if new_ticket.lane == 'P' else 'Regular lane' }}</span>
-            <hr>
-            <div class="slip-row"><span>Client name</span><strong>{{ new_ticket.citizen_name }}</strong></div>
-            <div class="slip-row"><span>Service</span><strong>{{ new_ticket.service.service_name }}</strong></div>
-            <div class="slip-row"><span>Date and time</span><strong>{{ new_ticket.created_at.strftime('%b %d, %Y %I:%M
-                    %p') }}</strong></div>
-            <hr>
-            <p class="ticket-note">Please wait for your number to be called. Thank you!</p>
-        </div>
-
-        <div class="modal-actions no-print">
-            <button type="button" class="btn btn-outline" id="register-another">Register another client</button>
-            <button type="button" class="btn btn-primary" id="print-slip">{{ icon('printer', 18) }} Print slip</button>
-        </div>
-    </div>
-</dialog>
-{% endif %}
-{% endblock %}

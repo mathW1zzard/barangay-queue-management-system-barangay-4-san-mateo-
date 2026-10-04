@@ -133,26 +133,6 @@
         }
     }
 
-    // ---------- Ticket slip ----------
-    const slip = $('#ticket-dialog');
-    if (slip) {
-        if (slip.dataset.autoopen === 'true') slip.showModal();
-        // Drop ?ticket=... so a refresh does not reopen the slip
-        slip.addEventListener('close', () => {
-            if (location.search) history.replaceState(null, '', location.pathname);
-        });
-        $('#register-another').addEventListener('click', () => {
-            slip.close();
-            const name = $('#citizen_name');
-            if (name) name.focus();
-        });
-        $('#print-slip').addEventListener('click', () => {
-            document.body.classList.add('print-slip');
-            window.print();
-        });
-        window.addEventListener('afterprint', () => document.body.classList.remove('print-slip'));
-    }
-
     // ---------- Services donut chart ----------
     const donut = $('#donut');
     const dataEl = $('#donut-data');

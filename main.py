@@ -56,7 +56,8 @@ def active_queue_today():
         db.close()
         
 templates.env.globals["active_queue_today"] = active_queue_today
-templates.env.globals["barangay_name"] = "Barangay 4, San Mateo, Isabela"
+BARANGAY_NAME = "Barangay 4, San Mateo, Isabela"
+templates.env.globals["barangay_name"] = BARANGAY_NAME
 
 class StatusEnum(str, Enum):
     ACTIVE = "Active"
@@ -94,42 +95,81 @@ def notify_display_update():
     asyncio.run(manager.broadcast("update"))
     
 # ANNOUNCEMENT AUDIO
-def announce_ticket(ticket_number: str):
-    with speech_lock:
-        try:
-            pythoncom.CoInitialize()
-            engine = pyttsx3.init()
-            engine.say(f"Ticket number {ticket_number}, please proceed to the counter")
-            engine.runAndWait()
-            engine.stop()
-        except Exception as e:
-            print(f"Announcement failed: {e}")
+def build_announcement_clips(ticket_number: str):
+    """Convert a ticket number such as P-047 into a list of reusable audio clips."""
+
+    letter, digits = ticket_number.split("-")
+
+    clips = [
+        "ticket_number",
+        f"letters/{letter}"
+    ]
+    clips += [
+        f"digits/{digit}"
+        for digit in digits
+    ]
+
+    clips.append("proceed_to_counter")
+
+    return clips
 
        
-def print_ticket(ticket_number: str, citizen_name: str, service_name: str, lane: str):
-    printer = Dummy()
+# True  = the slip prints by itself when a ticket is registered (the confirmation page then
+#         offers "Print again").
+# False = nothing prints until "Print ticket slip" is pressed on the confirmation page.
+AUTO_PRINT_ON_REGISTER = True
 
-    printer.set(align="center", bold=True, width=2, height=2)
-    printer.text(f"{ticket_number}\n")
+def get_printer():
+    """The one place that decides which printer is used.
 
-    printer.set(align="center", bold=False, width=1, height=1)
-    printer.text("-" * 32 + "\n")
-    printer.text(f"Name: {citizen_name}\n")
-    printer.text(f"Service: {service_name}\n")
-    printer.text(f"Lane: {'Priority' if lane == 'P' else 'Regular'}\n")
-    printer.text(f"Time: {datetime.now().strftime('%I:%M %p')}\n")
-    printer.text("-" * 32 + "\n")
-    printer.text("Please wait for your number\nto be called.\n\n")
+    Dummy() prints nothing; it only keeps the ESC/POS bytes (see last_ticket_printed.txt).
+    For the real USB thermal printer, replace the line below with, for example:
+        from escpos.printer import Usb
+        return Usb(0x04b8, 0x0e15)   # your printer's vendor ID and product ID
+    """
+    return Dummy()
 
-    printer.cut()
+def print_ticket(ticket_number: str, citizen_name: str, service_name: str, lane: str, created_at: datetime) -> bool:
+    """Send the queue slip to the printer. Returns True if it was sent, False if it failed.
 
-    # Dummy printer doesn't actually print - it just stores the output.
-    # We'll save it to a text file so you can see exactly what WOULD be printed.
-    output = printer.output
-    with open("last_ticket_printed.txt", "wb") as f:
-        f.write(output)
+    The lines match the slip on the confirmation page, so what is printed is what was confirmed.
+    """
+    try:
+        printer = get_printer()
+        rule = "-" * 32 + "\n"
 
-    print("Ticket sent to (dummy) printer - check last_ticket_printed.txt")
+        printer.set(align="center", bold=True, width=1, height=1)
+        printer.text(f"{BARANGAY_NAME.upper()}\n")
+        printer.set(align="center", bold=False, width=1, height=1)
+        printer.text("Official Queue Slip\n")
+        printer.text(rule)
+
+        printer.set(align="center", bold=True, width=2, height=2)
+        printer.text(f"{ticket_number}\n")
+        printer.set(align="center", bold=True, width=1, height=1)
+        printer.text(("PRIORITY LANE" if lane == "P" else "REGULAR LANE") + "\n")
+        printer.text(rule)
+
+        printer.set(align="left", bold=False, width=1, height=1)
+        printer.text(f"Client : {citizen_name}\n")
+        printer.text(f"Service: {service_name}\n")
+        printer.text(f"Date   : {created_at.strftime('%b %d, %Y %I:%M %p')}\n")
+        printer.text(rule)
+
+        printer.set(align="center", bold=False, width=1, height=1)
+        printer.text("Please wait for your number\nto be called. Thank you!\n\n")
+        printer.cut()
+
+        # Dummy doesn't print; save what WOULD be printed so it can be inspected.
+        if isinstance(printer, Dummy):
+            with open("last_ticket_printed.txt", "wb") as f:
+                f.write(printer.output)
+            print("Ticket sent to (dummy) printer - check last_ticket_printed.txt")
+        return True
+    except Exception as e:
+        print(f"Ticket printing failed: {e}")
+        return False
+
 
 @app.get("/")
 def read_root():
@@ -316,7 +356,7 @@ def admin_initials(request: Request):
 
 templates.env.globals["admin_initials"] = admin_initials
 
-@app.get("/dashboard")
+@app.get("/dashboard", dependencies=[Depends(login_required)])
 def show_dashboard(request: Request):
     db = SessionLocal()
     tickets = db.query(Ticket).all()
@@ -395,65 +435,101 @@ def show_dashboard(request: Request):
     return response
 
 @app.get("/client_registration", dependencies=[Depends(login_required)])
-def show_registration(request: Request, ticket: str = ""):
+def show_registration(request: Request):
     db = SessionLocal()
-    tickets = db.query(Ticket).all()
-    services = db.query(Service).filter(Service.service_status == "Active").all()
-    
     today_start = datetime.combine(date.today(), datetime.min.time())
-    
-    total_today = db.query(Ticket).filter(Ticket.created_at >= today_start).count()
-    
-    # After /register redirects here with ?ticket=P-004, show that ticket's slip
-    new_ticket = None
-    if ticket:
-        new_ticket = db.query(Ticket).filter(
-            Ticket.ticket_number == ticket, Ticket.created_at >= today_start
-        ).first()
 
+    tickets = db.query(Ticket).filter(Ticket.created_at >= today_start) \
+        .order_by(desc(Ticket.created_at)).all()
+    services = db.query(Service).filter(Service.service_status == "Active").all()
 
-    response =  templates.TemplateResponse(request, "client_registration.html", {
+    response = templates.TemplateResponse(request, "client_registration.html", {
         "tickets": tickets,
         "services": services,
-        "total_today": total_today,
-        "new_ticekt": new_ticket
+        "total_today": len(tickets),
     })
     db.close()
     return response
 
 @app.post("/register", dependencies=[Depends(login_required)])
-def register_ticket(request: Request, citizen_name: str =  Form(...), lane: str = Form(...), service_id: int = Form(...)):
+def register_ticket(citizen_name: str =  Form(...), lane: str = Form(...), service_id: int = Form(...)):
+    citizen_name = citizen_name.strip()
+    if not citizen_name:
+        raise HTTPException(status_code=400, detail="Client name is required.")
+    if lane not in ("P", "R"):
+        raise HTTPException(status_code=400, detail="Invalid lane.")
+
     db = SessionLocal()
-    
-    service = db.query(Service).filter(Service.id == service_id, Service.service_status == "Active").first()
-    today_start = datetime.combine(date.today(), datetime.min.time()) # start at 00:00:00 for today
-    
-    used_numbers = [
-        row[0] for row in db.query(Ticket.ticket_number)
-        .filter(Ticket.lane == lane, Ticket.created_at >= today_start).all()
-    ] + [
-        row[0] for row in db.query(Visit.ticket_number)
-        .filter(Visit.lane == lane, Visit.created_at >= today_start).all()
-    ]
-    
-    new_ticket_number = next_ticket_number(lane, used_numbers)
+    try:
+        # Only active services can be queued for
+        service = db.query(Service).filter(Service.id == service_id, Service.service_status == "Active").first()
+        if service is None:
+            raise HTTPException(status_code=400, detail="Selected service is unavailable.")
+        service_name = service.service_name
 
-    if service is None:
+        today_start = datetime.combine(date.today(), datetime.min.time())  # 00:00:00 today
+
+        # Use the highest number already handed out today, not a row count.
+        # A count would hand out a duplicate number once a ticket has been deleted.
+        used_numbers = [
+            row[0] for row in db.query(Ticket.ticket_number)
+            .filter(Ticket.lane == lane, Ticket.created_at >= today_start).all()
+        ] + [
+            row[0] for row in db.query(Visit.ticket_number)
+            .filter(Visit.lane == lane, Visit.created_at >= today_start).all()
+        ]
+        ticket_number = next_ticket_number(lane, used_numbers)
+        created_at = datetime.now()
+
+        ticket = Ticket(citizen_name=citizen_name, lane=lane, service_id=service_id,
+                        ticket_number=ticket_number, created_at=created_at)
+        db.add(ticket)
+        db.commit()
+        ticket_id = ticket.id
+    finally:
         db.close()
-        raise HTTPException(status_code=400, detail="Selected services is unavailable.")
 
-    new_ticket = Ticket(citizen_name=citizen_name, lane=lane, service_id=service_id, ticket_number=new_ticket_number, created_at=datetime.now())
-    response = templates.TemplateResponse(request, "ticket_confirmation.html", {
-        "ticket_number": new_ticket.ticket_number,
-        "citizen_name": new_ticket.citizen_name,
-        "lane": new_ticket.lane,
-        "service_name": service.service_name if service else "",
-    })
-    db.add(new_ticket)
-    db.commit()
-    db.close()
-    
-    return response
+    # Redirect instead of rendering here: a browser refresh then reloads the confirmation
+    # page and cannot submit the form (and create a second ticket) again.
+    url = f"/client_registration/confirmation/{ticket_id}"
+    if AUTO_PRINT_ON_REGISTER:
+        sent = print_ticket(ticket_number, citizen_name, service_name, lane, created_at)
+        url += f"?printed={1 if sent else 0}"
+    return RedirectResponse(url=url, status_code=303)
+
+@app.get("/client_registration/confirmation/{ticket_id}", dependencies=[Depends(login_required)])
+def show_ticket_confirmation(request: Request, ticket_id: int, printed: str = ""):
+    """printed: "1" = sent to the printer, "0" = the printer failed, "" = not printed yet."""
+    db = SessionLocal()
+    try:
+        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+        if ticket is None:
+            # Already served or deleted, so there is nothing left to confirm
+            return RedirectResponse(url="/client_registration", status_code=303)
+        return templates.TemplateResponse(request, "ticket_confirmation.html", {
+            "ticket": ticket,
+            "printed": printed,
+        })
+    finally:
+        db.close()
+
+
+@app.post("/client_registration/confirmation/{ticket_id}/print", dependencies=[Depends(login_required)])
+def print_ticket_again(ticket_id: int):
+    db = SessionLocal()
+    try:
+        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+        if ticket is None:
+            return RedirectResponse(url="/client_registration", status_code=303)
+        sent = print_ticket(ticket.ticket_number, ticket.citizen_name,
+                            ticket.service.service_name, ticket.lane, ticket.created_at)
+    finally:
+        db.close()
+    return RedirectResponse(
+        url=f"/client_registration/confirmation/{ticket_id}?printed={1 if sent else 0}",
+        status_code=303,
+    )
+
 
 def next_ticket_number(lane: str, used_numbers):
     """Next number for a lane, e.g. R-004, given every number already used today."""
@@ -481,7 +557,7 @@ def delete_ticket(ticket_id: int):
 
 # QUEUE MANAGEMENT
 @app.get("/queue_management", dependencies=[Depends(login_required)])
-def show_queue(request: Request):
+def show_queue(request: Request, announce: str = ""):
     db = SessionLocal()
     tickets = db.query(Ticket).all()
     services = db.query(Service).all()
@@ -499,6 +575,12 @@ def show_queue(request: Request):
     skipped_count = db.query(Ticket).filter(Ticket.status == "skipped", Ticket.created_at >= today_start).count()
             
     total_today = db.query(Ticket).filter(Ticket.created_at >= today_start).count()
+    
+    announce_clips = []
+    
+    if announce:
+        announce_clips = build_announcement_clips(announce)
+        
     response =  templates.TemplateResponse(request, "queue_management.html", {
         
         "total_today": total_today,
@@ -509,7 +591,8 @@ def show_queue(request: Request):
         "called_count": called_count,
         "skipped_count": skipped_count,
         "current_ticket": current_ticket,
-        "upcomming": upcomming
+        "upcomming": upcomming,
+        "announcement_clips": announce_clips
     })
     db.close()
     return response
@@ -542,11 +625,12 @@ def call_next(background_tasks: BackgroundTasks):
         next_ticket.called_at = datetime.now()
         number = next_ticket.ticket_number
         db.commit()
-        background_tasks.add_task(announce_ticket, number)
+        
     finally:
         db.close()
+    
+    return RedirectResponse(url=f"/queue_management?announce={number}",status_code=303)
 
-    return RedirectResponse(url="/queue_management", status_code=303)
 
 def archive_ticket(ticket_id : int, final_status : str):
     """Shared helper: mark a ticket finished and create its permanent Visit record."""
@@ -632,11 +716,13 @@ def recall_ticket(ticket_id: int, background_tasks: BackgroundTasks):
             ticket.called_at = datetime.now()  
             number = ticket.ticket_number
             db.commit()
-            background_tasks.add_task(announce_ticket, number)
+            
+            return RedirectResponse(url=f"/queue_management?announce={number}",status_code=303)
+            
     finally:
         db.close()
         
-    return RedirectResponse(url="/queue_management", status_code=303)
+    return RedirectResponse(url=f"/queue_management?announce={number}", status_code=303)
 
 @app.post("/complete/{ticket_id}", dependencies=[Depends(login_required)])
 def complete_ticket(ticket_id: int):

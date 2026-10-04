@@ -1,21 +1,66 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ticket Confirmation</title>
-</head>
-<body>
-    <h1>Ticket Registered</h1>
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Ticket Confirmation{% endblock %}
+{% block page_title %}Ticket Confirmation{% endblock %}
+{% block description %}Confirms a newly registered queue ticket and prints the queue slip{% endblock %}
+{% block page_subtitle %}Ticket registered{% endblock %}
 
-    <h2 style="font-size: 48px;">{{ ticket_number }}</h2>
+{% block content %}
+<section class="confirm-page">
+    <div class="card confirm-card">
 
-    <p><strong>Name:</strong> {{ citizen_name }}</p>
-    <p><strong>Service:</strong> {{ service_name }}</p>
-    <p><strong>Lane:</strong> {% if lane == "P" %}Priority{% else %}Regular{% endif %}</p>
+        <!-- Printer status. printed: "1" = sent, "0" = failed, "" = not printed yet -->
+        {% if printed == "1" %}
+        <div class="confirm-status confirm-status-ok no-print" role="status">
+            {{ icon('check', 22) }}
+            <div>
+                <strong>Ticket registered and sent to the printer.</strong>
+                <span>Hand the slip to the client. If it did not come out, press Print again.</span>
+            </div>
+        </div>
+        {% elif printed == "0" %}
+        <div class="confirm-status confirm-status-warn no-print" role="alert">
+            {{ icon('alert', 22) }}
+            <div>
+                <strong>Ticket registered, but the printer did not respond.</strong>
+                <span>Check that the printer is on and has paper, then press Print again.</span>
+            </div>
+        </div>
+        {% else %}
+        <div class="confirm-status confirm-status-ok no-print" role="status">
+            {{ icon('check', 22) }}
+            <div>
+                <strong>Ticket registered.</strong>
+                <span>Press Print ticket slip to print it for the client.</span>
+            </div>
+        </div>
+        {% endif %}
 
-    <p>Please wait for your number to be called.</p>
+        <!-- The queue slip. The printed slip carries the same lines. -->
+        <article class="ticket-slip" id="ticket-slip" aria-label="Queue slip {{ ticket.ticket_number }}">
+            <p class="ticket-org">{{ barangay_name|upper }}</p>
+            <p class="ticket-sub">Official Queue Slip</p>
+            <hr>
+            <p class="ticket-number">{{ ticket.ticket_number }}</p>
+            <span class="ticket-lane {{ 'ticket-lane-priority' if ticket.lane == 'P' else 'ticket-lane-regular' }}">{{ 'Priority lane' if ticket.lane == 'P' else 'Regular lane' }}</span>
+            <hr>
+            <dl class="slip-details">
+                <div class="slip-row"><dt>Client name</dt><dd>{{ ticket.citizen_name }}</dd></div>
+                <div class="slip-row"><dt>Service</dt><dd>{{ ticket.service.service_name }}</dd></div>
+                <div class="slip-row"><dt>Date and time</dt><dd>{{ ticket.created_at.strftime('%b %d, %Y %I:%M %p') }}</dd></div>
+            </dl>
+            <hr>
+            <p class="ticket-note">Please wait for your number to be called. Thank you!</p>
+        </article>
 
-    <a href="/queue_management"><button>Back to Queue Management</button></a>
-</body>
-</html>
+        <div class="confirm-actions no-print">
+            <form action="/client_registration/confirmation/{{ ticket.id }}/print" method="post">
+                <button type="submit" class="btn btn-primary btn-block btn-lg">
+                    {{ icon('printer', 20) }} {% if printed in ("0", "1") %}Print again{% else %}Print ticket slip{% endif %}
+                </button>
+            </form>
+            <a href="/client_registration" class="btn btn-outline btn-block btn-lg">Register another client</a>
+        </div>
+    </div>
+</section>
+{% endblock %}

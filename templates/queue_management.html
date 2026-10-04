@@ -136,8 +136,30 @@
 
 {% block scripts %}
 <script>
+    const announcementClips = {{ announcement_clips | tojson }};
+    let currentClip = 0;
+
+    function playAnnouncement() {
+        if (currentClip >= announcementClips.length) {
+            return;
+        }
+
+        const audio = new Audio(`/static/audio/${announcementClips[currentClip]}.mp3`);
+        audio.addEventListener("ended", function () {
+            currentClip++;
+            playAnnouncement();
+        });
+
+        audio.play().catch(error => {
+            console.error("Audio playback failed:", error);
+        });
+    }
+    if (announcementClips.length > 0) {
+        playAnnouncement();
+    }
     // Reload when the server announces a queue change
     const socket = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/display");
     socket.onmessage = () => location.reload();
 </script>
 {% endblock %}
+

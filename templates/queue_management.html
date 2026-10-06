@@ -18,9 +18,9 @@
                 {{ lane_tag(current_ticket.lane) }}
             </div>
             <div class="serving-person">
-                <p class="label">Visitor</p>
+                <p class="label">Current Visitor Name</p>
                 <h3>{{ current_ticket.citizen_name }}</h3>
-                <p class="hint">Requested service: <strong>{{ current_ticket.service.service_name }}</strong></p>
+                <p class="hint">Requested service: <strong class="service-name">{{ current_ticket.service.service_name }}</strong></p>
             </div>
         </div>
 

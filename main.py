@@ -12,9 +12,10 @@ from datetime import datetime, date, time
 from starlette.middleware.sessions import SessionMiddleware
 from enum import Enum
 from fastapi import WebSocket, WebSocketDisconnect
-from escpos.printer import Dummy
+from escpos.printer import Dummy, Win32Raw
 from collections import Counter
 from sqlalchemy import desc
+from pathlib import Path
 import secrets
 import string
 import bcrypt
@@ -27,7 +28,14 @@ import secrets
 import string
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="replace-this-with-a-random-secret-key")
+def load_secret_key() -> str:
+    key_file = Path(data_path("session_secret.key"))
+    if not key_file.exists():
+        key_file.write_text(secrets.token_hex(32))
+    return key_file.read_text().strip()
+
+app.add_middleware(SessionMiddleware, secret_key=load_secret_key())
+
 templates = Jinja2Templates(directory=resource_path("templates"))
 priority_streak = 0
 PAGE_SIZE = 15
@@ -191,22 +199,33 @@ def show_setup(request: Request):
 
 @app.post("/setup")
 def process_setup(request: Request, username: str = Form(...), password: str = Form(...), confirm_password: str = Form(...)):
-    if password != confirm_password:
-        return templates.TemplateResponse(request, "setup1.html", {"error": "Passwords do not match"})
-
-    if len(password) < 8:
-        return templates.TemplateResponse(request, "setup1.html", {"error": "Password must be at least 8 characters"})
-
-    recovery_key = generate_recovery_key()
-
-    password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-    recovery_key_hash = bcrypt.hashpw(recovery_key.encode(), bcrypt.gensalt()).decode()
-
     db = SessionLocal()
-    new_admin = Admin(username=username, password_hash=password_hash, recovery_key_hash=recovery_key_hash)
-    db.add(new_admin)
-    db.commit()
-    db.close()
+    try:
+        # 1. Setup already done -> never create a second admin
+        if db.query(Admin).first() is not None:
+            return RedirectResponse(url="/login", status_code=303)
+        
+        # 2. Validate input
+        if password != confirm_password:
+            return templates.TemplateResponse(request, "setup1.html", {"error": "Passwords do not match"})
+
+        if len(password) < 8:
+            return templates.TemplateResponse(request, "setup1.html", {"error": "Password must be at least 8 characters"})
+
+        # 3. Create the admin
+        recovery_key = generate_recovery_key()
+        password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+        recovery_key_hash = bcrypt.hashpw(recovery_key.encode(), bcrypt.gensalt()).decode()
+
+        already_setup = db.query(Admin).filter()
+        if already_setup is None:
+            db.close()
+            
+        new_admin = Admin(username=username, password_hash=password_hash, recovery_key_hash=recovery_key_hash)
+        db.add(new_admin)
+        db.commit()
+    finally:
+        db.close()
 
     response = templates.TemplateResponse(request, "setup2.html", {"recovery_key": recovery_key})
     return response
@@ -293,12 +312,7 @@ def show_change_password(request: Request):
 
 
 @app.post("/change-password", dependencies=[Depends(login_required)])
-def process_change_password(
-    request: Request,
-    current_password: str = Form(...),
-    new_password: str = Form(...),
-    confirm_password: str = Form(...),
-):
+def process_change_password(request: Request, current_password: str = Form(...), new_password: str = Form(...), confirm_password: str = Form(...)):
     db = SessionLocal()
     try:
         admin = db.query(Admin).filter(Admin.id == request.session["admin_id"]).first()

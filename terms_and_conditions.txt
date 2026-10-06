@@ -1,0 +1,74 @@
+BARANGAY QUEUE & SERVICE MANAGEMENT SYSTEM
+TERMS AND CONDITIONS OF USE
+
+Please read these terms carefully. By selecting "I accept the agreement" you confirm that you have read, understood and agreed to them. If you do not agree, select "I do not accept" and the installation will stop.
+
+
+1. PURPOSE OF THE SYSTEM
+
+This software manages client queueing, service records and attendance for the barangay office. It stores personal information of clients and staff on the computer where it is installed.
+
+
+2. APPLICABLE PHILIPPINE LAWS
+
+The use of this system is subject to the following laws and their implementing rules:
+
+  - Republic Act No. 10173 - Data Privacy Act of 2012
+    Personal data protection. Sets the responsibilities and safeguards for processing personal information.
+
+  - Republic Act No. 10175 - Cybercrime Prevention Act of 2012
+    Cybercrime. Addresses offenses involving computer systems and computer data.
+
+  - Republic Act No. 8792 - Electronic Commerce Act of 2000
+    Electronic transactions. Provides legal recognition and rules for electronic data messages and transactions.
+
+  - Republic Act No. 8293 - Intellectual Property Code of the Philippines
+    Intellectual property. Framework for copyright and other intellectual property rights.
+
+
+3. DATA PRIVACY (RA 10173)
+
+By using this system, the barangay and its authorized staff agree to:
+
+  a. Collect and record only the personal information needed to serve the client (transparency, legitimate purpose and proportionality).
+  b. Keep all client records confidential and use them only for official barangay purposes.
+  c. Not disclose, copy, export or print client records for any purpose other than official barangay business, unless allowed by law or with the client's consent.
+  d. Keep the administrator password and the recovery key secret. The recovery key is shown only once during setup and must be stored safely, for example with the Barangay Captain.
+  e. Keep regular backups of the database file and store the backups securely.
+  f. Report any suspected data breach, loss or unauthorized access to the barangay's designated Data Protection Officer without delay.
+  g. Keep records only as long as necessary, and dispose of them securely when they are no longer needed.
+
+
+4. AUTHORIZED USE AND PROHIBITED ACTS (RA 10175)
+
+Only authorized barangay personnel may use this system. You agree NOT to:
+
+  a. Access the system, its database or its files without authority.
+  b. Alter, delete, damage or tamper with records, tickets, logs or attendance data to falsify them.
+  c. Share your login with other people or use another person's account.
+  d. Install, run or introduce malicious software on the computer running this system.
+  e. Interfere with the normal operation of the system or the computer it runs on.
+
+Unauthorized access, data interference and misuse of computer systems may be punishable under the Cybercrime Prevention Act.
+
+
+5. ELECTRONIC RECORDS (RA 8792)
+
+Queue tickets, service records and attendance entries created by this system are electronic data messages. Staff are responsible for the accuracy of what they enter and must not create or alter entries in a misleading way.
+
+
+6. SOFTWARE OWNERSHIP AND INTELLECTUAL PROPERTY (RA 8293)
+
+  a. This software is protected by copyright. All rights not expressly granted are reserved by its developer.
+  b. You may install and use it for the barangay's official operations. You may not copy it for distribution, sell it, reverse engineer it, or remove its notices, except as the law allows.
+  c. This software includes third-party open-source components. They remain the property of their respective owners and are used under their own licenses.
+
+
+7. NO WARRANTY
+
+The software is provided "as is". The developer does not guarantee that it will be error-free or uninterrupted, and is not liable for data loss resulting from hardware failure, power loss, missing backups or misuse. Regular backups are the user's responsibility.
+
+
+8. ACCEPTANCE
+
+Installing and using this software means you accept these terms. These terms are a general notice and do not replace legal advice or the barangay's own data privacy policies and manual.

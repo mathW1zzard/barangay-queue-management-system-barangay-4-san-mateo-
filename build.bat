@@ -15,5 +15,5 @@ if errorlevel 1 (
 )
 
 echo.
-echo Done. Run:  dist\BarangayQueue\BarangayQueueManagement.exe
+echo Done. Run:  dist\BarangayQueueManagement\BarangayQueueManagement.exe
 pause

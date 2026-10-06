@@ -1,0 +1,17 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Build output
+build/
+dist/
+installer_output/
+
+# Runtime data
+*.db
+last_ticket_printed.txt
+
+# Environments and editor
+.venv/
+venv/
+.vscode/

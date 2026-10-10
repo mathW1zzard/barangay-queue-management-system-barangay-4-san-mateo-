@@ -302,6 +302,7 @@ select {
     flex: 1;
     width: 100%;
     max-width: 1360px;
+    margin-inline: auto; /* <-- Raise the cap and center it*/
     padding: 32px;
     display: flex;
     flex-direction: column;
@@ -323,7 +324,7 @@ select {
 }
 
 .card-title {
-    margin-bottom: 20px;
+    margin-bottom: 30px;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -488,6 +489,7 @@ select {
     padding: 0;
     margin: 0;
     min-width: 0;
+    margin-top: 5px;
 }
 
 .field>label,
@@ -704,7 +706,7 @@ tbody tr:hover .empty-row {
 }
 
 .empty-note {
-    color: var(--faint);
+    color: var(--card);
     font-size: 15px;
     padding: 16px 0;
 }
@@ -1096,7 +1098,7 @@ tbody tr:hover .empty-row {
 
 .idle-message {
     font-size: 17px;
-    color: var(--muted);
+    color: var(--card);
     max-width: 34ch;
 }
 
@@ -1127,11 +1129,12 @@ tbody tr:hover .empty-row {
 .next-number {
     font-size: 20px;
     font-weight: 800;
+    color: white;
 }
 
 .next-name {
     font-size: 15px;
-    color: var(--muted);
+    color: var(--amber);
 }
 
 .tabs {
@@ -1632,6 +1635,10 @@ tbody tr:hover .empty-row {
     .live-panel {
         grid-template-columns: 1fr;
     }
+
+    .reg-layout {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (max-width: 900px) {
@@ -1736,4 +1743,94 @@ tbody tr:hover .empty-row {
     .ticket-slip {
         background: #fff;
     }
+}
+
+/* ---------------------------------------------------------------- registration: live queue panel */
+.reg-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    gap: 28px;
+    align-items: start;
+}
+
+.reg-layout .form-card {
+    max-width: none;
+}
+
+.queue-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+}
+
+.qs-now {
+    background: var(--navy);
+    color: #fff;
+    border-radius: 18px;
+    padding: 20px 22px;
+    margin-bottom: 40px;
+}
+
+.qs-now .label {
+    color: var(--faint);
+}
+
+.qs-number {
+    display: block;
+    margin-top: 35px;
+    font-size: 44px;
+    font-weight: 800;
+    letter-spacing: .02em;
+    line-height: 1.1;
+}
+
+.qs-next {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 16px 4px;
+    border-bottom: 1px solid var(--line);
+}
+
+.qs-next strong {
+    font-size: 22px;
+    font-weight: 800;
+}
+
+.qs-lanes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 30px;
+}
+
+.qs-lane {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    background: var(--bg);
+    border-radius: 14px;
+    padding: 14px 16px;
+}
+
+.qs-lane strong {
+    font-size: 32px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.qs-lane span:last-child {
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.notice p {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--muted);
+}
+/* ------------------------------------------------------PURGE OLD ATTENDANCE------------------------------------------------*/
+.delete-description {
+    margin-bottom: 10px;
 }

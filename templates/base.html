@@ -31,6 +31,8 @@
                 ('/queue_management', 'Queue Management', 'list'),
                 ('/attendance', 'Attendance', 'calendar'),
                 ('/services', 'Services', 'landmark'),
+                ('/audit_logs', 'Audit Logs', 'clipboard'),
+                ('/maintenance', 'Maintenance', 'database'),
                 ] %}
                 {% for href, label, ico in nav_items %}
                 <a href="{{ href }}" class="nav-link{{ ' active' if path.startswith(href) }}" {% if

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Maintenance{% endblock %}
+{% block page_title %}Maintenance{% endblock %}
+{% block page_subtitle %}Backups and old records{% endblock %}
+{% block description %}Back up the database and purge old attendance records{% endblock %}
+{% block content %}
+{% if message %}
+<div class="alert {{ 'alert-success' if message.ok else 'alert-error' }}" role="{{ 'status' if message.ok else 'alert' }}">{{ message.text }}</div>
+{% endif %}
+
+<section class="card">
+    <h2 class="card-title">Back up the database</h2>
+    <p class="hint">Saves a dated copy of everything (tickets, attendance, services, accounts and the audit log).
+        Leave the folder empty to use <strong>{{ default_backup_dir }}</strong>, or type the full path of another
+        folder or drive, such as an external USB drive.</p>
+    <p class="hint">Database size: {{ db_size_mb }} MB &middot; {{ visit_count }} attendance record(s){% if oldest_visit %}, the oldest from {{ oldest_visit.strftime('%b %d, %Y') }}{% endif %}</p>
+    <form action="/maintenance/backup" method="post" class="filters">
+        <div class="field field-grow">
+            <label for="folder">Backup folder (optional)</label>
+            <input type="text" name="folder" id="folder" placeholder="D:\Backups" autocomplete="off">
+        </div>
+        <button type="submit" class="btn btn-primary">{{ icon('database', 18) }} Back up now</button>
+    </form>
+</section>
+
+<section class="card">
+    <h2 class="card-title">Purge old attendance records</h2>
+    <p class="hint delete-description">Permanently deletes attendance history from before a date you choose, to free up space on this
+        computer. Back up first. For safety, records from the last {{ purge_min_days }} days cannot be purged. The
+        live queue, services, accounts and this audit log are never touched.</p>
+    <button type="button" class="btn btn-danger-outline" data-open-modal="purge-modal">{{ icon('trash', 18) }} Purge old records&hellip;</button>
+</section>
+{% endblock %}
+
+{% block dialogs %}
+<dialog class="modal" id="purge-modal">
+    <form action="/maintenance/purge" method="post" class="modal-body">
+        <h2>Purge old attendance records?</h2>
+        <p class="modal-text">Every attendance record created <strong>before</strong> the date below will be permanently
+            deleted. This cannot be undone, so make a backup first.</p>
+        <div class="field">
+            <label for="cutoff">Delete records from before</label>
+            <input type="date" name="cutoff" id="cutoff" max="{{ latest_cutoff }}" required>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-outline" data-close>Cancel</button>
+            <button type="submit" class="btn btn-danger">Purge records</button>
+        </div>
+    </form>
+</dialog>
+{% endblock %}

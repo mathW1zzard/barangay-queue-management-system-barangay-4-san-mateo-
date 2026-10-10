@@ -39,12 +39,19 @@ def wait_until_ready(url: str, timeout: float = 30.0) -> bool:
 
 
 if __name__ == "__main__":
+    main.log_app_start()
+    
     port = find_free_port()
     url = f"http://127.0.0.1:{port}"
 
     server_thread = threading.Thread(target=start_server, args=(port,), daemon=True)
     server_thread.start()
     wait_until_ready(url)
+
+# Let the app window download files (the attendance CSV). Very old pywebview versions have no settings.
+    if hasattr(webview, "settings"):
+        webview.settings["ALLOW_DOWNLOADS"] = True
+
 
     webview.create_window(
         "Barangay Queue & Service Management",
@@ -53,3 +60,4 @@ if __name__ == "__main__":
         height=800,
     )
     webview.start(icon=resource_path("app_icon.ico"))
+    main.log_app_closed()

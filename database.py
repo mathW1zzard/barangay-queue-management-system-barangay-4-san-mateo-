@@ -69,4 +69,15 @@ class Admin(Base):
     password_hash = Column(String)
     recovery_key_hash = Column(String, nullable=True)
     
+class AdminLog(Base):
+    __tablename__ = "admin_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    # A copy of the name, not a foreign key, so the entry stays readable if the account changes
+    admin_username = Column(String)
+    category = Column(String, index=True)   # Queue / Service / Settings / Security / Database
+    action = Column(String)                 # short label, e.g. "Ticket Skipped"
+    description = Column(String)            # the readable sentence
+    
 Base.metadata.create_all(bind=engine)

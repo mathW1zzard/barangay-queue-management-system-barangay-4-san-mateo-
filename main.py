@@ -5,20 +5,21 @@ from fastapi import Request
 from fastapi import Form
 from fastapi import BackgroundTasks
 from fastapi import Depends
-from fastapi.responses import RedirectResponse
-from database import SessionLocal, Ticket, Service, Visit, Admin
+from fastapi.responses import RedirectResponse, Response
+from database import SessionLocal, Ticket, Service, Visit, Admin, AdminLog, engine
 from paths import resource_path, data_path
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timedelta
 from starlette.middleware.sessions import SessionMiddleware
 from enum import Enum
 from fastapi import WebSocket, WebSocketDisconnect
 from escpos.printer import Dummy, Win32Raw
 from collections import Counter
-from sqlalchemy import desc
+from sqlalchemy import desc, func, text
 from pathlib import Path
-import secrets
-import string
 import bcrypt
+import csv
+import io
+import sqlite3
 import asyncio
 import math
 import re
@@ -40,6 +41,96 @@ templates = Jinja2Templates(directory=resource_path("templates"))
 priority_streak = 0
 PAGE_SIZE = 15
 
+# ADMIN LOGS
+LOG_CATEGORIES = ["Queue", "Service", "Settings", "Security", "Database"]
+NOT_SIGNED_IN = "(not signed in)" # who gets blamed for failed logins
+
+# SESSION TRACKING (so the audit log can record a session that ended by closing the app)
+active_admin_id = None
+SESSION_EVENTS = ("Login", "Logout", "Session Closed", "Session Interrupted")
+
+# MAINTENANCE
+BACKUP_DIR_DEFAULT = Path(data_path("backups"))
+PURGE_MIN_AGE_DAYS = 30 # safety: records newer than this can never be purged
+
+def flash(request: Request, ok: bool, text_: str):
+    """One-time message shown on the next page load (stored in the session cookie)."""
+    request.session["flash"] = {"ok": ok, "text": text_}
+    
+def log_action(category: str, action: str, description: str = "", request: Request = None, username: str = None):
+    """Write one row to the admin audit log. Call it AFTER the action succeeded.
+
+    Who did it: pass `request` (the signed-in admin is looked up from the session) or pass
+    `username` directly (login, recovery, background events). With neither, it is logged as "system".
+    It never raises: a logging problem must not stop the real action (like calling a ticket).
+    """
+    try:
+        db = SessionLocal()
+        try:
+            if username is None and request is not None:
+                admin_id = request.session.get("admin_id")
+                admin = db.query(Admin).filter(Admin.id == admin_id).first() if admin_id else None
+                username = admin.username if admin else None
+            db.add(AdminLog(
+                admin_username=username or "system",
+                category=category,
+                action=action,
+                description=description,
+                created_at=datetime.now(),
+            ))
+            db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"Audit log failed: {e}")
+
+def log_app_start():
+    """Run once when the program starts (called from run_app.py).
+
+    1. If an admin's last session event is a "Login" with nothing after it, the previous run ended
+       without a logout and without a normal window close (crash, power cut, killed in Task Manager).
+       Record that now. The real end time is unknown, so the entry says it was detected at startup.
+    2. Record that the application started.
+    """
+    try:
+        db = SessionLocal()
+        try:
+            names = [r[0] for r in db.query(AdminLog.admin_username).filter(AdminLog.action == "Login").distinct().all()]
+            unfinished = []
+            for name in names:
+                last = db.query(AdminLog).filter(AdminLog.admin_username == name, AdminLog.category == "Security", AdminLog.action.in_(SESSION_EVENTS)).order_by(AdminLog.id.desc()).first()
+                
+                if last and last.action == "Login":
+                    unfinished.append((name, last.created_at))
+        finally:
+            db.close()            
+
+        for name, since in unfinished:
+            began = since.strftime("%m/%d/%Y %I:%M %p") if since else "an earlier time"
+            log_action("Security", "Session Interrupted",
+                       f"Session that began {began} was never closed (power loss, crash or forced shutdown). "
+                       f"Detected at startup, so the real end time is unknown.", username=name)
+        log_action("Security", "Application Started", "Application started", username="system")
+        
+    except Exception as e:
+        print(f"Startup audit check failed: {e}")
+  
+def log_app_closed():
+    """Run after the app window has closed (called from run_app.py). Logs it only if someone was still signed in."""
+    if active_admin_id is None:
+        return
+    try:
+        db = SessionLocal()
+        try:
+            admin = db.query(Admin).filter(Admin.id == active_admin_id).first()
+            name = admin.username if admin else None
+        finally:
+            db.close()
+        if name:
+            log_action("Security", "Session Closed", "Application was closed without signing out", username=name)
+    except Exception as e:
+        print(f"Closed audit log failed: {e}")
+          
 def parse_date(value: str):
     try:
         return date.fromisoformat(value) if value else None
@@ -173,6 +264,7 @@ def print_ticket(ticket_number: str, citizen_name: str, service_name: str, lane:
         return True
     except Exception as e:
         print(f"Ticket printing failed: {e}")
+        log_action("Settings", "Print Error", f"Ticket slip {ticket_number} failed to print: {e}", username="system")
         return False
 
 
@@ -216,17 +308,14 @@ def process_setup(request: Request, username: str = Form(...), password: str = F
         recovery_key = generate_recovery_key()
         password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
         recovery_key_hash = bcrypt.hashpw(recovery_key.encode(), bcrypt.gensalt()).decode()
-
-        already_setup = db.query(Admin).filter()
-        if already_setup is None:
-            db.close()
             
         new_admin = Admin(username=username, password_hash=password_hash, recovery_key_hash=recovery_key_hash)
         db.add(new_admin)
         db.commit()
     finally:
         db.close()
-
+    log_action("Security", "Account Created", f'Created admin account "{username}" (first-time setup)', username=username)
+    
     response = templates.TemplateResponse(request, "setup2.html", {"recovery_key": recovery_key})
     return response
 
@@ -243,9 +332,13 @@ def process_login(request: Request, username: str = Form(...), password: str = F
     db.close()
 
     if not admin or not bcrypt.checkpw(password.encode(), admin.password_hash.encode()):
+        log_action("Security", "Login Failed", f'Failed login attempt for username "{username[:50]}"', username=NOT_SIGNED_IN)
         return templates.TemplateResponse(request, "login.html", {"error": "Invalid username or password"})
 
+    global active_admin_id
     request.session["admin_id"] = admin.id
+    active_admin_id = admin.id
+    log_action("Security", "Login", "Signed in", username=admin.username)
     return RedirectResponse(url="/dashboard", status_code=303)
 
 
@@ -275,6 +368,8 @@ def process_forgot_password(
 
     if error:
         db.close()
+        if error.startswith("Invalid username"):
+            log_action("Security", "Recovery Failed", f'Failed password reset attempt for username "{username[:50]}"', username=NOT_SIGNED_IN)
         return templates.TemplateResponse(request, "forgot_password.html", {"error": error})
 
     # Reset password AND issue a brand new recovery key (the old one was just used, so retire it)
@@ -284,10 +379,14 @@ def process_forgot_password(
     db.commit()
     db.close()
 
+    log_action("Security", "Password Reset", "Password reset using the recovery key; a new recovery key was issued", username=username)
     return templates.TemplateResponse(request, "recovery_key_display.html", {"recovery_key": new_recovery_key})
 
 @app.post("/logout")
 def logout(request: Request):
+    global active_admin_id
+    log_action("Security", "Logout", "Signed out", request)   # before the session is cleared
+    active_admin_id = None
     request.session.clear()
     return RedirectResponse(url="/login", status_code=303)
 
@@ -304,6 +403,8 @@ def login_required(request: Request):
     """Use as dependencies=[Depends(login_required)] on every staff-only route."""
     if "admin_id" not in request.session:
         raise NotAuthenticated()
+    global active_admin_id
+    active_admin_id = request.session["admin_id"]
 
 
 @app.get("/change-password", dependencies=[Depends(login_required)])
@@ -329,17 +430,20 @@ def process_change_password(request: Request, current_password: str = Form(...),
             error = "Password must be at least 8 characters"
 
         if error:
+            if error == "Current password is incorrect":
+                log_action("Security", "Password Change Failed", "Wrong current password entered", request)
             return templates.TemplateResponse(request, "change_password.html", {"error": error})
 
         admin.password_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
         db.commit()
     finally:
         db.close()
-
+        
+    log_action("Security", "Password Changed", "Changed their own password", request)
     return templates.TemplateResponse(request, "change_password.html", {"success": "Password updated."})
 
 def generate_recovery_key():
-    """Generates a key like BQS-7F3K-9D2M-XQ1R"""
+    """Generates a key like BQS-123A-456B-789C"""
     chars = string.ascii_uppercase + string.digits
     groups = ["".join(secrets.choice(chars) for _ in range(4)) for _ in range(3)]
     return "BQS-" + "-".join(groups)
@@ -458,9 +562,42 @@ def show_registration(request: Request):
         "tickets": tickets,
         "services": services,
         "total_today": len(tickets),
+        "queue_info": queue_snapshot()
     })
     db.close()
     return response
+
+def queue_snapshot() -> dict:
+    """Numbers for the Live Queue panel on the registration page."""
+    
+    db = SessionLocal()
+    
+    try:
+        today_start = datetime.combine(date.today(), datetime.min.time())
+        
+        current = db.query(Ticket).filter(Ticket.status == "called") \
+            .order_by(Ticket.called_at.desc()).first()
+            
+        now_serving = current.ticket_number if current else None
+        
+        def waiting(lane):
+            return db.query(Ticket).filter(
+                Ticket.status == "waiting", Ticket.lane == lane, Ticket.created_at >= today_start).count()
+            
+        waiting_priority = waiting("P")
+        waiting_regular = waiting("R")
+    finally:
+        db.close()
+        
+    upcoming = get_incoming_order(limit=1)
+    next_up = upcoming[0].ticket_number if upcoming else None
+    
+    return {
+        "now_serving": now_serving,
+        "next_up": next_up,
+        "waiting_priority": waiting_priority,
+        "waiting_regular": waiting_regular
+    }
 
 @app.post("/register", dependencies=[Depends(login_required)])
 def register_ticket(citizen_name: str =  Form(...), lane: str = Form(...), service_id: int = Form(...)):
@@ -526,16 +663,18 @@ def show_ticket_confirmation(request: Request, ticket_id: int, printed: str = ""
 
 
 @app.post("/client_registration/confirmation/{ticket_id}/print", dependencies=[Depends(login_required)])
-def print_ticket_again(ticket_id: int):
+def print_ticket_again(request: Request, ticket_id: int):
     db = SessionLocal()
     try:
         ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
         if ticket is None:
             return RedirectResponse(url="/client_registration", status_code=303)
+        number = ticket.ticket_number
         sent = print_ticket(ticket.ticket_number, ticket.citizen_name,
                             ticket.service.service_name, ticket.lane, ticket.created_at)
     finally:
         db.close()
+    log_action("Queue", "Slip Reprinted", f"Reprinted slip for {number}" + ("" if sent else " (printer error)"), request)
     return RedirectResponse(
         url=f"/client_registration/confirmation/{ticket_id}?printed={1 if sent else 0}",
         status_code=303,
@@ -554,16 +693,20 @@ def next_ticket_number(lane: str, used_numbers):
 
 
 @app.post("/tickets/delete/{ticket_id}", dependencies=[Depends(login_required)])
-def delete_ticket(ticket_id: int):
+def delete_ticket(request: Request, ticket_id: int):
     """Remove a ticket from the live queue. Nothing is written to attendance history."""
     db = SessionLocal()
+    number = status = None
     try:
         ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
         if ticket:
+            number, status = ticket.ticket_number, ticket.status
             db.delete(ticket)
             db.commit()
     finally:
         db.close()
+    if number:
+        log_action("Queue", "Ticket Deleted", f"Removed {number} (was {status}) from the live queue; not saved to attendance", request)
     return RedirectResponse(url="/client_registration", status_code=303)
 
 # QUEUE MANAGEMENT
@@ -611,7 +754,7 @@ def show_queue(request: Request, announce: str = ""):
 
 # LIVE PANEL
 @app.post("/call-next", dependencies=[Depends(login_required)])
-def call_next(background_tasks: BackgroundTasks):
+def call_next(request: Request):
     global priority_streak
     db = SessionLocal()
     try:
@@ -639,7 +782,7 @@ def call_next(background_tasks: BackgroundTasks):
         
     finally:
         db.close()
-    
+    log_action("Queue", "Ticket Called", f"Called {number}", request)
     return RedirectResponse(url=f"/queue_management?announce={number}",status_code=303)
 
 
@@ -704,19 +847,24 @@ def get_incoming_order(limit: int = 3):
     
 
 @app.post("/skip/{ticket_id}", dependencies=[Depends(login_required)])
-def skip_ticket(ticket_id: int):
+def skip_ticket(request: Request, ticket_id: int):
     db = SessionLocal()
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    number = None
     if ticket:
         ticket.status = "skipped"   # just a status change, NOT archived
+        number = ticket.ticket_number
         db.commit()
     db.close()
+    if number:
+        log_action("Queue", "Ticket Skipped", f"Skipped {number}", request)
     return RedirectResponse(url="/queue_management", status_code=303)
 
 
 @app.post("/recall/{ticket_id}", dependencies=[Depends(login_required)])
-def recall_ticket(ticket_id: int, background_tasks: BackgroundTasks):
+def recall_ticket(request: Request, ticket_id: int):
     db = SessionLocal()
+    number = None
     try:
         if db.query(Ticket).filter(Ticket.status == "called").first():
             return RedirectResponse(url="/queue_management", status_code=303)
@@ -728,40 +876,81 @@ def recall_ticket(ticket_id: int, background_tasks: BackgroundTasks):
             number = ticket.ticket_number
             db.commit()
             
-            return RedirectResponse(url=f"/queue_management?announce={number}",status_code=303)
-            
     finally:
         db.close()
         
+    if number is None:   # nothing was recalled (ticket missing or not skipped)
+        return RedirectResponse(url="/queue_management", status_code=303)
+
+    log_action("Queue", "Ticket Recalled", f"Recalled skipped ticket {number}", request)
     return RedirectResponse(url=f"/queue_management?announce={number}", status_code=303)
 
 @app.post("/complete/{ticket_id}", dependencies=[Depends(login_required)])
-def complete_ticket(ticket_id: int):
+def complete_ticket(request: Request, ticket_id: int):
     archive_ticket(ticket_id, "completed")
     db = SessionLocal()
     
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    number = None
     
     if ticket:
+        number = ticket.ticket_number
         db.delete(ticket)
         db.commit()
     db.close()
+    if number:
+        log_action("Queue", "Ticket Completed", f"Marked {number} as completed", request)
     return RedirectResponse(url="/queue_management", status_code=303)
 
 
 @app.post("/no-show/{ticket_id}", dependencies=[Depends(login_required)])
-def no_show_ticket(ticket_id: int):
+def no_show_ticket(request: Request, ticket_id: int):
     archive_ticket(ticket_id, "no_show")   # reuses your existing archive helper - permanent
     db = SessionLocal()
         
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    number = None
         
     if ticket:
+        number = ticket.ticket_number
         db.delete(ticket)
         db.commit()
     db.close()
+    if number:
+        log_action("Queue", "Ticket No-Show", f"Marked {number} as no-show", request)
     return RedirectResponse(url="/queue_management", status_code=303)
 
+@app.post("/queue/clear", dependencies=[Depends(login_required)])
+def clear_queue(request: Request):
+    """End-of-day cleanup: every unserved ticket becomes a no-show in attendance history.
+
+    Ticket numbers do NOT restart: they are counted from today's tickets AND visits.
+    """
+    global priority_streak
+    db = SessionLocal()
+    counts = Counter()
+    try:
+        tickets = db.query(Ticket).filter(Ticket.status.in_(["waiting", "called", "skipped"])).all()
+        now = datetime.now()
+        for t in tickets:
+            counts[t.status] += 1
+            db.add(Visit(
+                citizen_name=t.citizen_name, lane=t.lane, ticket_number=t.ticket_number,
+                final_status="no_show", service_id=t.service_id,
+                created_at=t.created_at, called_at=t.called_at, completed_at=now,
+            ))
+            db.delete(t)
+        db.commit()
+    finally:
+        db.close()
+
+    total = sum(counts.values())
+    if total:
+        priority_streak = 0
+        log_action("Queue", "Queue Cleared",
+                   f"Cleared {total} unserved ticket(s) ({counts['waiting']} waiting, {counts['called']} called, "
+                   f"{counts['skipped']} skipped); all saved as no-show", request)
+    return RedirectResponse(url="/queue_management", status_code=303)
 
 @app.get("/attendance", dependencies=[Depends(login_required)])
 def show_attendance(
@@ -890,6 +1079,7 @@ def attendance_print(request: Request, date_from: str = "", date_to: str = "", l
         if q:
             parts.append(f'Search: "{q}"')
             
+        log_action("Database", "Attendance Printed", f"Opened the attendance print view ({', '.join(parts)})", request)
         return templates.TemplateResponse(request,"print_attendance.html", {
             
             "stats": stats,
@@ -904,7 +1094,48 @@ def attendance_print(request: Request, date_from: str = "", date_to: str = "", l
     finally:
         db.close()
         
-        
+def csv_safe(value) -> str:
+    """Stop Excel from running a cell that starts with = + - @ as a formula."""
+    s = "" if value is None else str(value)
+    return "'" + s if s[:1] in ("=", "+", "-", "@") else s
+
+
+@app.get("/attendance/export", dependencies=[Depends(login_required)])
+def attendance_export(request: Request, date_from: str = "", date_to: str = "", lane: str = "", service_id: str = "", q: str = ""):
+    """Download the attendance table (same filters as the page) as a CSV file."""
+    service_id_int = int(service_id) if service_id else None
+    d_from, d_to = resolve_date_range(date_from, date_to)
+
+    db = SessionLocal()
+    try:
+        rows = apply_visit_filters(db.query(Visit), d_from, d_to, lane, service_id_int, q) \
+            .order_by(Visit.created_at).all()
+
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(["Date", "Ticket", "Client name", "Type", "Service", "Time in", "Time out", "Status"])
+        for v in rows:
+            writer.writerow([
+                v.created_at.strftime("%m/%d/%Y"),
+                csv_safe(v.ticket_number),
+                csv_safe(v.citizen_name),
+                "Priority" if v.lane == "P" else "Regular",
+                csv_safe(v.service.service_name if v.service else "Removed service"),
+                v.called_at.strftime("%I:%M %p") if v.called_at else "",
+                v.completed_at.strftime("%I:%M %p") if v.completed_at else "",
+                (v.final_status or "").replace("_", " ").title(),
+            ])
+    finally:
+        db.close()
+
+    log_action("Database", "CSV Export", f"Exported {len(rows)} attendance record(s) for {range_label(d_from, d_to)}", request)
+    return Response(
+        content="\ufeff" + buffer.getvalue(),   # BOM so Excel reads UTF-8 names correctly
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="attendance_{d_from}_to_{d_to}.csv"'},
+    )
+    
+    
 # SERVICE
 @app.get("/services", dependencies=[Depends(login_required)])
 def list_services(request: Request):
@@ -922,33 +1153,44 @@ def list_services(request: Request):
     return response
 
 @app.post("/services/add", dependencies=[Depends(login_required)])
-def add_services(service_name: str = Form(...), service_status: StatusEnum = Form(alias="service_status")):
+def add_services(request: Request, service_name: str = Form(...), service_status: StatusEnum = Form(alias="service_status")):
     db = SessionLocal()
     new_service = Service(service_name=service_name, service_status=service_status)
     db.add(new_service)
     db.commit()
     db.close()
+    log_action("Service", "Service Added", f"Added service: {service_name} ({service_status.value})", request)
     return RedirectResponse(url="/services", status_code=303)
 
 @app.post("/services/edit/{service_id}", dependencies=[Depends(login_required)])
-def edit_service(service_id: int, service_name: str = Form(...), service_status: StatusEnum = Form(alias="service_status")):
+def edit_service(request: Request, service_id: int, service_name: str = Form(...), service_status: StatusEnum = Form(alias="service_status")):
     db = SessionLocal()
     service = db.query(Service).filter(Service.id == service_id).first()
+    changes = []
     
     if service:
+        if service.service_name != service_name:
+            changes.append(f'renamed from "{service.service_name}"')
+        if service.service_status != service_status.value:
+            changes.append(f"status {service.service_status} -> {service_status.value}")
         service.service_name = service_name
         service.service_status = service_status
         db.commit()
     db.close()
+    if changes:   # saving the form without changing anything is not worth a log row
+        log_action("Service", "Service Modified", f'Modified service "{service_name}": ' + "; ".join(changes), request)
+
     return RedirectResponse(url="/services", status_code=303)
 
 @app.post("/services/delete/{service_id}", dependencies=[Depends(login_required)])
-def delete_service(service_id: int):
+def delete_service(request: Request, service_id: int):
     db = SessionLocal()
+    log_entry = None
     try:
         service = db.query(Service).filter(Service.id == service_id).first()
 
         if service:
+            name = service.service_name
             has_history = (
                 db.query(Ticket).filter(Ticket.service_id == service_id).first() is not None
                 or db.query(Visit).filter(Visit.service_id == service_id).first() is not None
@@ -956,9 +1198,168 @@ def delete_service(service_id: int):
             if has_history:
                 # Old tickets and visits still point at this service, so keep the row
                 service.service_status = "Inactive"
+                log_entry = ("Service Deactivated", f'Deleted service "{name}", but it has ticket history, so it was set to Inactive instead')
             else:
                 db.delete(service)
+                log_entry = ("Service Deleted", f'Deleted service: {name}')
             db.commit()
     finally:
         db.close()
+    if log_entry:
+        log_action("Service", log_entry[0], log_entry[1], request)
     return RedirectResponse(url="/services", status_code=303)
+
+# AUDIT LOGS
+@app.get("/audit_logs", dependencies=[Depends(login_required)])
+def show_audit_logs(
+    request: Request,
+    date_from: str = "",
+    date_to: str = "",
+    category: str = "",
+    q: str = "",
+    page: int = 1,
+):
+    # Same rule as Attendance: the date filter always has a value (today by default)
+    d_from, d_to = resolve_date_range(date_from, date_to)
+    if category not in LOG_CATEGORIES:
+        category = ""
+
+    db = SessionLocal()
+    try:
+        query = db.query(AdminLog).filter(AdminLog.created_at >= datetime.combine(d_from, time.min),
+                                          AdminLog.created_at <= datetime.combine(d_to, time.max))
+
+        if category:
+            query = query.filter(AdminLog.category == category)
+        if q:
+            like = f"%{q}%"
+            query = query.filter(
+                AdminLog.admin_username.ilike(like)
+                | AdminLog.action.ilike(like)
+                | AdminLog.description.ilike(like)
+            )
+
+        total_records = query.count()
+        total_pages = max(1, math.ceil(total_records / PAGE_SIZE))
+        page = max(1, min(page, total_pages))
+
+        logs = (
+            query.order_by(AdminLog.created_at.desc(), AdminLog.id.desc())
+            .offset((page - 1) * PAGE_SIZE)
+            .limit(PAGE_SIZE)
+            .all()
+        )
+
+        response = templates.TemplateResponse(request, "audit_logs.html", {
+            "logs": logs,
+            "categories": LOG_CATEGORIES,
+            "date_from": d_from.isoformat(),
+            "date_to": d_to.isoformat(),
+            "category": category,
+            "search": q,
+            "page": page,
+            "total_pages": total_pages,
+            "total_records": total_records,
+            "start_record": (page - 1) * PAGE_SIZE + 1 if total_records else 0,
+            "end_record": min(page * PAGE_SIZE, total_records),
+        })
+    finally:
+        db.close()
+    return response
+
+
+# MAINTENANCE (backup + purge)
+@app.get("/maintenance", dependencies=[Depends(login_required)])
+def show_maintenance(request: Request):
+    message = request.session.pop("flash", None)
+
+    db_file = Path(data_path("barangay_system.db"))
+    db_size_mb = round(db_file.stat().st_size / 1048576, 2) if db_file.exists() else 0
+
+    db = SessionLocal()
+    try:
+        visit_count = db.query(Visit).count()
+        oldest_visit = db.query(func.min(Visit.created_at)).scalar()
+    finally:
+        db.close()
+
+    return templates.TemplateResponse(request, "maintenance.html", {
+        "message": message,
+        "db_size_mb": db_size_mb,
+        "visit_count": visit_count,
+        "oldest_visit": oldest_visit,
+        "default_backup_dir": str(BACKUP_DIR_DEFAULT),
+        "purge_min_days": PURGE_MIN_AGE_DAYS,
+        "latest_cutoff": (date.today() - timedelta(days=PURGE_MIN_AGE_DAYS)).isoformat(),
+    })
+
+
+@app.post("/maintenance/backup", dependencies=[Depends(login_required)])
+def run_backup(request: Request, folder: str = Form("")):
+    """Copy the live database to a timestamped file using SQLite's own backup API.
+
+    (A plain file copy of a database that is being written to can produce a damaged copy.)
+    """
+    folder = folder.strip().strip('"')
+    target_dir = Path(folder) if folder else BACKUP_DIR_DEFAULT
+    try:
+        if not folder:
+            target_dir.mkdir(parents=True, exist_ok=True)
+        elif not target_dir.is_absolute() or not target_dir.is_dir():
+            raise FileNotFoundError(f"folder not found (use a full path such as D:\\Backups): {target_dir}")
+
+        target = target_dir / f"barangay_system_{datetime.now():%Y%m%d_%H%M%S}.db"
+        source = sqlite3.connect(data_path("barangay_system.db"))
+        try:
+            dest = sqlite3.connect(str(target))
+            try:
+                source.backup(dest)
+            finally:
+                dest.close()
+        finally:
+            source.close()
+    except Exception as e:
+        flash(request, False, f"Backup failed: {e}")
+        log_action("Database", "Backup Failed", f"Backup to {target_dir} failed: {e}", request)
+    else:
+        flash(request, True, f"Backup saved: {target}")
+        log_action("Database", "Backup", f"Database backup saved to {target}", request)
+    return RedirectResponse(url="/maintenance", status_code=303)
+
+
+@app.post("/maintenance/purge", dependencies=[Depends(login_required)])
+def purge_old_records(request: Request, cutoff: str = Form(...)):
+    """Delete attendance history (visits) from before the cutoff date.
+
+    Only the visits table is touched: never the live queue, services, accounts or the audit log.
+    """
+    cutoff_date = parse_date(cutoff)
+    latest_allowed = date.today() - timedelta(days=PURGE_MIN_AGE_DAYS)
+
+    if cutoff_date is None:
+        flash(request, False, "Pick a valid date.")
+    elif cutoff_date > latest_allowed:
+        flash(request, False, f"For safety, only records older than {PURGE_MIN_AGE_DAYS} days can be purged "
+                              f"(latest allowed date: {latest_allowed.strftime('%b %d, %Y')}).")
+    else:
+        db = SessionLocal()
+        try:
+            deleted = db.query(Visit).filter(
+                Visit.created_at < datetime.combine(cutoff_date, time.min)
+            ).delete(synchronize_session=False)
+            db.commit()
+        finally:
+            db.close()
+
+        if deleted:
+            try:   # hand the freed space back to the disk
+                with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                    conn.execute(text("VACUUM"))
+            except Exception as e:
+                print(f"VACUUM failed: {e}")
+            log_action("Database", "Data Purge",
+                       f"Purged {deleted} attendance record(s) from before {cutoff_date.strftime('%b %d, %Y')}", request)
+            flash(request, True, f"Purged {deleted} attendance record(s) from before {cutoff_date.strftime('%b %d, %Y')}.")
+        else:
+            flash(request, True, f"No attendance records exist from before {cutoff_date.strftime('%b %d, %Y')}. Nothing was deleted.")
+    return RedirectResponse(url="/maintenance", status_code=303)

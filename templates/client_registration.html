@@ -8,54 +8,85 @@
 {% block content %}
 {% set active_services = services|selectattr('service_status', 'equalto', 'Active')|list %}
 
-<section class="card form-card form-card-wide">
-    <h2>Client Ticket Dispenser</h2>
-    <p class="hint">Fill in the client's details and choose Priority or Regular lane.</p>
+<div class="reg-layout">
+    <section class="card form-card form-card-wide">
+        <h2>Client Ticket Dispenser</h2>
+        <p class="hint">Fill in the client's details and choose Priority or Regular lane.</p>
 
-    <form action="/register" method="post" class="form">
-        <div class="field">
-            <label for="citizen_name">Client full name</label>
-            <input type="text" name="citizen_name" id="citizen_name" autocomplete="off" required>
-        </div>
-
-        <div class="field">
-            <label for="service_id">Requested service</label>
-            <select name="service_id" id="service_id" required {% if not active_services %}disabled{% endif %}>
-                {% for service in active_services %}
-                <option value="{{ service.id }}">{{ service.service_name }}</option>
-                {% else %}
-                <option value="">No active services. Add one on the Services page.</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <fieldset class="field lane-choice">
-            <legend>Client classification</legend>
-            <div class="lane-grid">
-                <label class="lane-card">
-                    <input type="radio" name="lane" value="P">
-                    <span class="lane-card-text">
-                        <span class="lane-card-title">Priority</span>
-                        <span class="lane-card-desc">Senior citizens, persons with disabilities, pregnant women</span>
-                    </span>
-                    <span class="lane-dot" aria-hidden="true"></span>
-                </label>
-                <label class="lane-card">
-                    <input type="radio" name="lane" value="R" checked>
-                    <span class="lane-card-text">
-                        <span class="lane-card-title">Regular</span>
-                        <span class="lane-card-desc">All other walk-in visitors</span>
-                    </span>
-                    <span class="lane-dot" aria-hidden="true"></span>
-                </label>
+        <form action="/register" method="post" class="form">
+            <div class="field">
+                <label for="citizen_name">Client full name</label>
+                <input type="text" name="citizen_name" id="citizen_name" autocomplete="off" required>
             </div>
-        </fieldset>
 
-        <button type="submit" class="btn btn-primary btn-block btn-lg" {% if not active_services %}disabled{% endif
-            %}>Generate ticket</button>
-    </form>
-</section>
+            <div class="field">
+                <label for="service_id">Requested service</label>
+                <select name="service_id" id="service_id" required {% if not active_services %}disabled{% endif %}>
+                    {% for service in active_services %}
+                    <option value="{{ service.id }}">{{ service.service_name }}</option>
+                    {% else %}
+                    <option value="">No active services. Add one on the Services page.</option>
+                    {% endfor %}
+                </select>
+            </div>
 
+            <fieldset class="field lane-choice">
+                <legend>Client classification</legend>
+                <div class="lane-grid">
+                    <label class="lane-card">
+                        <input type="radio" name="lane" value="P">
+                        <span class="lane-card-text">
+                            <span class="lane-card-title">Priority</span>
+                            <span class="lane-card-desc">Senior citizens, persons with disabilities, pregnant
+                                women</span>
+                        </span>
+                        <span class="lane-dot" aria-hidden="true"></span>
+                    </label>
+                    <label class="lane-card">
+                        <input type="radio" name="lane" value="R" checked>
+                        <span class="lane-card-text">
+                            <span class="lane-card-title">Regular</span>
+                            <span class="lane-card-desc">All other walk-in visitors</span>
+                        </span>
+                        <span class="lane-dot" aria-hidden="true"></span>
+                    </label>
+                </div>
+            </fieldset>
+
+            <button type="submit" class="btn btn-primary btn-block btn-lg" {% if not active_services %}disabled{% endif
+                %}>Generate ticket</button>
+        </form>
+    </section>
+
+    <aside class="queue-panel" aria-label="Live queue status">
+        <section class="card">
+            <h2 class="card-title">Live Queue</h2>
+
+            <div class="qs-now">
+                <span class="label">Now serving</span>
+                <strong class="qs-number">{{ queue_info.now_serving or '—' }}</strong>
+            </div>
+
+            <div class="qs-next">
+                <span class="label">Next in line</span>
+                <strong>{{ queue_info.next_up or '—' }}</strong>
+            </div>
+
+            <div class="qs-lanes">
+                <div class="qs-lane">
+                    {{ lane_tag('P') }}
+                    <strong>{{ queue_info.waiting_priority }}</strong>
+                    <span>waiting</span>
+                </div>
+                <div class="qs-lane">
+                    {{ lane_tag('R') }}
+                    <strong>{{ queue_info.waiting_regular }}</strong>
+                    <span>waiting</span>
+                </div>
+            </div>
+        </section>
+    </aside>
+</div>
 <section class="card">
     <h2 class="card-title">Registered Today <span class="count-pill">{{ total_today }}</span></h2>
     <div class="table-wrap">
@@ -97,4 +128,3 @@
     </div>
 </section>
 {% endblock %}
-

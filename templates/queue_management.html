@@ -74,6 +74,17 @@
 </section>
 
 <!--QUEUE TABLE-->
+<div class="section-head">
+    <h2>Today's Queue</h2>
+    {% if tickets %}
+    <button type="button" class="btn btn-danger-outline" data-confirm data-action="/queue/clear"
+        data-title="Clear the live queue?"
+        data-message="All {{ tickets|length }} unserved ticket(s) (waiting, called and skipped) will be removed from the queue and saved to attendance history as no-show. Ticket numbers keep counting up; they do not restart. This cannot be undone."
+        data-label="Clear queue" data-variant="danger">{{ icon('trash', 18) }} Clear queue</button>
+    {% else %}
+    <button type="button" class="btn btn-danger-outline" disabled>{{ icon('trash', 18) }} Clear queue</button>
+    {% endif %}
+</div>
 <section class="card">
     <div class="tabs" role="tablist" aria-label="Filter by status">
         <button type="button" role="tab" class="tab-btn active" aria-selected="true" data-status="all">Active queue

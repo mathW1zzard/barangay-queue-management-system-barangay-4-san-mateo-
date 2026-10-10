@@ -11,7 +11,10 @@
 <section class="card">
     <div class="section-head">
         <h2>Client Attendance</h2>
-        <a class="btn btn-outline" rel="noopener" href="/attendance/print?{{ qs }}">{{ icon('printer', 18) }} Print attendance</a>
+        <div class="row-actions">
+            <a class="btn btn-outline" href="/attendance/export?{{ qs }}" download>{{ icon('download', 18) }} Export CSV</a>
+            <a class="btn btn-outline" rel="noopener" href="/attendance/print?{{ qs }}">{{ icon('printer', 18) }} Print attendance</a>
+        </div>
     </div>
 
     <!--FILTERS-->

@@ -1,0 +1,123 @@
+2026-10-10 16:37:11  INFO      barangay: Logging started
+2026-10-10 16:37:58  INFO      barangay: Logging started
+2026-10-10 16:38:01  INFO      barangay: Logging started
+2026-10-10 16:38:16  INFO      barangay: Logging started
+2026-10-10 16:40:29  INFO      barangay: Logging started
+2026-10-10 16:40:44  INFO      barangay: Logging started
+2026-10-10 16:42:00  INFO      barangay: Logging started
+2026-10-10 16:44:24  INFO      barangay: Application window closed
+2026-10-10 16:50:41  INFO      barangay: Logging started
+2026-10-10 16:57:21  INFO      barangay: Application window closed
+2026-10-10 16:57:29  INFO      barangay: Logging started
+2026-10-10 16:57:32  INFO      barangay: Server address: http://127.0.0.1:55741
+2026-10-10 17:01:45  ERROR     uvicorn.error: Exception in ASGI application
+Traceback (most recent call last):
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 422, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self.scope, self.receive, self.send
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\starlette\applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\starlette\middleware\sessions.py", line 88, in __call__
+    await self.app(scope, receive, send_wrapper)
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\starlette\routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\fastapi\routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\fastapi\routing.py", line 1281, in handle
+    await super().handle(scope, receive, send)
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\starlette\routing.py", line 280, in handle
+    await self.app(scope, receive, send)
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\fastapi\routing.py", line 158, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\fastapi\routing.py", line 144, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\fastapi\routing.py", line 706, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\fastapi\routing.py", line 354, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\starlette\concurrency.py", line 34, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\anyio\to_thread.py", line 65, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        func, args, abandon_on_cancel=abandon_on_cancel, limiter=limiter
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\anyio\_backends\_asyncio.py", line 2706, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "C:\laragon\bin\python\python-3.13\Lib\site-packages\anyio\_backends\_asyncio.py", line 1100, in run
+    result = context.run(func, *args)
+  File "C:\Users\gaylo\Downloads\barangay-queue-management-system\main.py", line 967, in show_attendance
+    service_id_int = int(service_id) if service_id else None
+                     ~~~^^^^^^^^^^^^
+ValueError: invalid literal for int() with base 10: 'abc'
+2026-10-10 17:03:14  INFO      barangay: Application window closed
+2026-10-10 17:32:03  INFO      barangay: Logging started
+2026-10-10 17:32:06  INFO      barangay: Server address: http://127.0.0.1:26472
+2026-10-10 17:33:45  INFO      barangay: Application window closed
+2026-10-10 17:34:21  INFO      barangay: Logging started
+2026-10-10 17:34:23  INFO      barangay: Server address: http://127.0.0.1:8386
+2026-10-10 17:34:46  INFO      barangay: Ticket sent to (dummy) printer - check last_ticket_printed.txt
+2026-10-10 17:34:56  INFO      barangay: Ticket sent to (dummy) printer - check last_ticket_printed.txt
+2026-10-10 17:37:36  INFO      barangay: Ticket sent to (dummy) printer - check last_ticket_printed.txt
+2026-10-10 17:38:18  INFO      barangay: Application window closed
+2026-10-10 17:38:59  INFO      barangay: Logging started
+2026-10-10 17:39:01  INFO      barangay: Server address: http://127.0.0.1:11567
+2026-10-10 17:39:44  ERROR     asyncio: Exception in callback _ProactorBasePipeTransport._call_connection_lost()
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost()>
+Traceback (most recent call last):
+  File "C:\laragon\bin\python\python-3.13\Lib\asyncio\events.py", line 89, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\laragon\bin\python\python-3.13\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+2026-10-10 17:42:45  ERROR     asyncio: Exception in callback _ProactorBasePipeTransport._call_connection_lost()
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost()>
+Traceback (most recent call last):
+  File "C:\laragon\bin\python\python-3.13\Lib\asyncio\events.py", line 89, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\laragon\bin\python\python-3.13\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+2026-10-10 17:43:14  INFO      barangay: Application window closed
+2026-10-10 19:34:56  INFO      barangay: Logging started
+2026-10-10 19:35:00  INFO      barangay: Server address: http://127.0.0.1:30498
+2026-10-10 19:38:43  INFO      barangay: Application window closed

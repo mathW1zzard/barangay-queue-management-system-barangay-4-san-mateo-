@@ -7,7 +7,10 @@ import urllib.request
 import uvicorn
 import webview
 
+from app_logging import setup_logging, log
+setup_logging()   # first, so even an error while importing main is recorded
 import main  # imported directly (not "main:app") so PyInstaller bundles it
+
 from paths import resource_path
 
 
@@ -43,10 +46,14 @@ if __name__ == "__main__":
     
     port = find_free_port()
     url = f"http://127.0.0.1:{port}"
-
+    log.info("Server address: %s", url) #Ready to remove for testing
+    
     server_thread = threading.Thread(target=start_server, args=(port,), daemon=True)
     server_thread.start()
     wait_until_ready(url)
+    
+    if not wait_until_ready(url):
+        log.error("The server did not start within 30 seconds")    
 
 # Let the app window download files (the attendance CSV). Very old pywebview versions have no settings.
     if hasattr(webview, "settings"):
@@ -61,3 +68,4 @@ if __name__ == "__main__":
     )
     webview.start(icon=resource_path("app_icon.ico"))
     main.log_app_closed()
+    log.info("Application window closed")

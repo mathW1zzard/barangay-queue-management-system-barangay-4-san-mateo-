@@ -3,9 +3,10 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi import Request 
 from fastapi import Form
-from fastapi import BackgroundTasks
 from fastapi import Depends
 from fastapi.responses import RedirectResponse, Response
+from app_logging import setup_logging, log
+setup_logging()
 from database import SessionLocal, Ticket, Service, Visit, Admin, AdminLog, engine
 from paths import resource_path, data_path
 from datetime import datetime, date, time, timedelta
@@ -81,8 +82,8 @@ def log_action(category: str, action: str, description: str = "", request: Reque
             db.commit()
         finally:
             db.close()
-    except Exception as e:
-        print(f"Audit log failed: {e}")
+    except Exception:
+        log.exception("Audit log failed")
 
 def log_app_start():
     """Run once when the program starts (called from run_app.py).
@@ -112,8 +113,8 @@ def log_app_start():
                        f"Detected at startup, so the real end time is unknown.", username=name)
         log_action("Security", "Application Started", "Application started", username="system")
         
-    except Exception as e:
-        print(f"Startup audit check failed: {e}")
+    except Exception:
+        log.exception("Startup audit check failed")
   
 def log_app_closed():
     """Run after the app window has closed (called from run_app.py). Logs it only if someone was still signed in."""
@@ -260,28 +261,26 @@ def print_ticket(ticket_number: str, citizen_name: str, service_name: str, lane:
         if isinstance(printer, Dummy):
             with open(data_path("last_ticket_printed.txt"), "wb") as f:
                 f.write(printer.output)
-            print("Ticket sent to (dummy) printer - check last_ticket_printed.txt")
+            log.info("Ticket sent to (dummy) printer - check last_ticket_printed.txt")
         return True
     except Exception as e:
-        print(f"Ticket printing failed: {e}")
+        log.exception("Ticket printing failed for %s", ticket_number)
         log_action("Settings", "Print Error", f"Ticket slip {ticket_number} failed to print: {e}", username="system")
         return False
 
 
 @app.get("/")
 def read_root():
-    db = SessionLocal()
-    user_exists = db.query(Admin).first()
-    db.close()
+    with SessionLocal() as db:
+        user_exists = db.query(Admin).first()
     if not user_exists:
         return RedirectResponse(url="/setup", status_code=303)
     return RedirectResponse(url="/login", status_code=303)
 
 @app.get("/setup")
 def show_setup(request: Request):
-    db = SessionLocal()
-    existing_admin = db.query(Admin).first()
-    db.close()
+    with SessionLocal() as db:
+        existing_admin = db.query(Admin).first()
 
     if existing_admin:
         return RedirectResponse(url="/login", status_code=303)
@@ -327,9 +326,8 @@ def show_login(request: Request):
 
 @app.post("/login")
 def process_login(request: Request, username: str = Form(...), password: str = Form(...)):
-    db = SessionLocal()
-    admin = db.query(Admin).filter(Admin.username == username).first()
-    db.close()
+    with SessionLocal() as db:
+        admin = db.query(Admin).filter(Admin.username == username).first()
 
     if not admin or not bcrypt.checkpw(password.encode(), admin.password_hash.encode()):
         log_action("Security", "Login Failed", f'Failed login attempt for username "{username[:50]}"', username=NOT_SIGNED_IN)
@@ -355,8 +353,8 @@ def process_forgot_password(
     new_password: str = Form(...),
     confirm_password: str = Form(...),
 ):
-    db = SessionLocal()
-    admin = db.query(Admin).filter(Admin.username == username).first()
+    with SessionLocal() as db:
+        admin = db.query(Admin).filter(Admin.username == username).first()
 
     error = None
     if not admin or not admin.recovery_key_hash or not bcrypt.checkpw(recovery_key.encode(), admin.recovery_key_hash.encode()):
@@ -366,18 +364,16 @@ def process_forgot_password(
     elif len(new_password) < 8:
         error = "Password must be at least 8 characters"
 
+    if not error:
+        # Reset password AND issue a brand new recovery key (the old one was just used, so retire it)
+        new_recovery_key = generate_recovery_key()
+        admin.password_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+        admin.recovery_key_hash = bcrypt.hashpw(new_recovery_key.encode(), bcrypt.gensalt()).decode()
+        db.commit()
     if error:
-        db.close()
         if error.startswith("Invalid username"):
             log_action("Security", "Recovery Failed", f'Failed password reset attempt for username "{username[:50]}"', username=NOT_SIGNED_IN)
         return templates.TemplateResponse(request, "forgot_password.html", {"error": error})
-
-    # Reset password AND issue a brand new recovery key (the old one was just used, so retire it)
-    new_recovery_key = generate_recovery_key()
-    admin.password_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
-    admin.recovery_key_hash = bcrypt.hashpw(new_recovery_key.encode(), bcrypt.gensalt()).decode()
-    db.commit()
-    db.close()
 
     log_action("Security", "Password Reset", "Password reset using the recovery key; a new recovery key was issued", username=username)
     return templates.TemplateResponse(request, "recovery_key_display.html", {"recovery_key": new_recovery_key})
@@ -453,10 +449,8 @@ def get_current_admin(request: Request):
     admin_id = request.session.get("admin_id")
     if not admin_id:
         return None
-    db = SessionLocal()
-    admin = db.query(Admin).filter(Admin.id == admin_id).first()
-    db.close()
-    return admin
+    with SessionLocal() as db:
+        return db.query(Admin).filter(Admin.id == admin_id).first()
 
 def admin_initials(request: Request):
     """Two-letter avatar text from the signed-in username (e.g. admin.secretary -> AS)."""
@@ -473,99 +467,96 @@ templates.env.globals["admin_initials"] = admin_initials
 
 @app.get("/dashboard", dependencies=[Depends(login_required)])
 def show_dashboard(request: Request):
-    db = SessionLocal()
-    tickets = db.query(Ticket).all()
-    services = db.query(Service).all()
-    
-    today_start = datetime.combine(date.today(), datetime.min.time())
-    
-    active_tickets = db.query(Ticket).filter(Ticket.created_at >= today_start).all()
-    visits_today = db.query(Visit).filter(Visit.created_at >= today_start).all()
-    
-    service_counter = Counter()
-    for t in active_tickets:
-        service_counter[t.service_id] += 1
-    for v in visits_today:
-        service_counter[v.service_id] += 1
-
-    service_volume = [
-        {"name": s.service_name, "count": service_counter.get(s.id, 0)}
-        for s in services
-    ]
-    service_volume.sort(key=lambda row: row["count"], reverse=True)
-
-    max_count = max((row["count"] for row in service_volume), default=0)
-    for row in service_volume:
-        row["percent"] = round(row["count"] / max_count * 100) if max_count else 0
+    with SessionLocal() as db:
+        tickets = db.query(Ticket).all()
+        services = db.query(Service).all()
         
-    # Stat cards
-    waiting_count = db.query(Ticket).filter(
-        Ticket.status == "waiting", Ticket.created_at >= today_start
-    ).count()
-
-    completed_count = db.query(Visit).filter(
-        Visit.final_status == "completed", Visit.created_at >= today_start
-    ).count()
-
-    no_show_count = db.query(Visit).filter(
-        Visit.final_status == "no_show", Visit.created_at >= today_start
-    ).count()
-
-    # Issued today = still active + already archived
-    total_count = len(active_tickets) + len(visits_today)
-    
-    overview = []
-    for t in active_tickets:
-        overview.append({
-            "ticket_number": t.ticket_number,
-            "citizen_name": t.citizen_name,
-            "service_name": t.service.service_name,
-            "status": t.status,
-            "sort_time": t.called_at or t.created_at,
-        })
-    for v in visits_today:
-        overview.append({
-            "ticket_number": v.ticket_number,
-            "citizen_name": v.citizen_name,
-            "service_name": v.service.service_name,
-            "status": v.final_status,
-            "sort_time": v.completed_at or v.created_at,
-        })
+        today_start = datetime.combine(date.today(), datetime.min.time())
         
-    
-    overview.sort(key=lambda row: row["sort_time"], reverse=True)
-    overview = overview[:10]
+        active_tickets = db.query(Ticket).filter(Ticket.created_at >= today_start).all()
+        visits_today = db.query(Visit).filter(Visit.created_at >= today_start).all()
+        
+        service_counter = Counter()
+        for t in active_tickets:
+            service_counter[t.service_id] += 1
+        for v in visits_today:
+            service_counter[v.service_id] += 1
 
-    response =  templates.TemplateResponse(request, "dashboard.html", {
-        "overview": overview,
-        "total_count": total_count,
-        "waiting_count": waiting_count,
-        "completed_count": completed_count,
-        "no_show_count": no_show_count,
-        "tickets": tickets,
-        "services": services,
-        "service_volume": service_volume    
-    })
-    db.close()
-    return response
+        service_volume = [
+            {"name": s.service_name, "count": service_counter.get(s.id, 0)}
+            for s in services
+        ]
+        service_volume.sort(key=lambda row: row["count"], reverse=True)
+
+        max_count = max((row["count"] for row in service_volume), default=0)
+        for row in service_volume:
+            row["percent"] = round(row["count"] / max_count * 100) if max_count else 0
+            
+        # Stat cards
+        waiting_count = db.query(Ticket).filter(
+            Ticket.status == "waiting", Ticket.created_at >= today_start
+        ).count()
+
+        completed_count = db.query(Visit).filter(
+            Visit.final_status == "completed", Visit.created_at >= today_start
+        ).count()
+
+        no_show_count = db.query(Visit).filter(
+            Visit.final_status == "no_show", Visit.created_at >= today_start
+        ).count()
+
+        # Issued today = still active + already archived
+        total_count = len(active_tickets) + len(visits_today)
+        
+        overview = []
+        for t in active_tickets:
+            overview.append({
+                "ticket_number": t.ticket_number,
+                "citizen_name": t.citizen_name,
+                "service_name": t.service.service_name,
+                "status": t.status,
+                "sort_time": t.called_at or t.created_at,
+            })
+        for v in visits_today:
+            overview.append({
+                "ticket_number": v.ticket_number,
+                "citizen_name": v.citizen_name,
+                "service_name": v.service.service_name,
+                "status": v.final_status,
+                "sort_time": v.completed_at or v.created_at,
+            })
+            
+        
+        overview.sort(key=lambda row: row["sort_time"], reverse=True)
+        overview = overview[:10]
+
+        response =  templates.TemplateResponse(request, "dashboard.html", {
+            "overview": overview,
+            "total_count": total_count,
+            "waiting_count": waiting_count,
+            "completed_count": completed_count,
+            "no_show_count": no_show_count,
+            "tickets": tickets,
+            "services": services,
+            "service_volume": service_volume    
+        })
+        return response
 
 @app.get("/client_registration", dependencies=[Depends(login_required)])
 def show_registration(request: Request):
-    db = SessionLocal()
-    today_start = datetime.combine(date.today(), datetime.min.time())
+    with SessionLocal() as db:
+        today_start = datetime.combine(date.today(), datetime.min.time())
 
-    tickets = db.query(Ticket).filter(Ticket.created_at >= today_start) \
-        .order_by(desc(Ticket.created_at)).all()
-    services = db.query(Service).filter(Service.service_status == "Active").all()
+        tickets = db.query(Ticket).filter(Ticket.created_at >= today_start) \
+            .order_by(desc(Ticket.created_at)).all()
+        services = db.query(Service).filter(Service.service_status == "Active").all()
 
-    response = templates.TemplateResponse(request, "client_registration.html", {
-        "tickets": tickets,
-        "services": services,
-        "total_today": len(tickets),
-        "queue_info": queue_snapshot()
-    })
-    db.close()
-    return response
+        return templates.TemplateResponse(request, "client_registration.html", {
+            "tickets": tickets,
+            "services": services,
+            "total_today": len(tickets),
+            "queue_info": queue_snapshot()
+        })
 
 def queue_snapshot() -> dict:
     """Numbers for the Live Queue panel on the registration page."""
@@ -712,44 +703,44 @@ def delete_ticket(request: Request, ticket_id: int):
 # QUEUE MANAGEMENT
 @app.get("/queue_management", dependencies=[Depends(login_required)])
 def show_queue(request: Request, announce: str = ""):
-    db = SessionLocal()
-    tickets = db.query(Ticket).all()
-    services = db.query(Service).all()
-    upcomming = get_incoming_order(limit=3)
-    active_statuses = ["waiting", "called", "skipped"]
-    
-    today_start = datetime.combine(date.today(), datetime.min.time())
-    
-    current_ticket = db.query(Ticket).filter(Ticket.status == "called") \
-        .order_by(Ticket.called_at.desc()).first()
+    with SessionLocal() as db:
+        tickets = db.query(Ticket).all()
+        services = db.query(Service).all()
+        upcomming = get_incoming_order(limit=3)
+        active_statuses = ["waiting", "called", "skipped"]
+        
+        today_start = datetime.combine(date.today(), datetime.min.time())
+        
+        current_ticket = db.query(Ticket).filter(Ticket.status == "called") \
+            .order_by(Ticket.called_at.desc()).first()
 
-    all_active = db.query(Ticket).filter(Ticket.status.in_(active_statuses), Ticket.created_at >= today_start).count()
-    waiting_count = db.query(Ticket).filter(Ticket.status == "waiting", Ticket.created_at >= today_start).count()
-    called_count = db.query(Ticket).filter(Ticket.status == "called", Ticket.created_at >= today_start).count()
-    skipped_count = db.query(Ticket).filter(Ticket.status == "skipped", Ticket.created_at >= today_start).count()
+        all_active = db.query(Ticket).filter(Ticket.status.in_(active_statuses), Ticket.created_at >= today_start).count()
+        waiting_count = db.query(Ticket).filter(Ticket.status == "waiting", Ticket.created_at >= today_start).count()
+        called_count = db.query(Ticket).filter(Ticket.status == "called", Ticket.created_at >= today_start).count()
+        skipped_count = db.query(Ticket).filter(Ticket.status == "skipped", Ticket.created_at >= today_start).count()
+                
+        total_today = db.query(Ticket).filter(Ticket.created_at >= today_start).count()
+        
+        announce_clips = []
+        
+        if announce:
+            announce_clips = build_announcement_clips(announce)
             
-    total_today = db.query(Ticket).filter(Ticket.created_at >= today_start).count()
-    
-    announce_clips = []
-    
-    if announce:
-        announce_clips = build_announcement_clips(announce)
+        response =  templates.TemplateResponse(request, "queue_management.html", {
+            
+            "total_today": total_today,
+            "tickets": tickets,
+            "services": services,
+            "all_active": all_active,
+            "waiting_count": waiting_count,
+            "called_count": called_count,
+            "skipped_count": skipped_count,
+            "current_ticket": current_ticket,
+            "upcomming": upcomming,
+            "announcement_clips": announce_clips
+        })
         
-    response =  templates.TemplateResponse(request, "queue_management.html", {
-        
-        "total_today": total_today,
-        "tickets": tickets,
-        "services": services,
-        "all_active": all_active,
-        "waiting_count": waiting_count,
-        "called_count": called_count,
-        "skipped_count": skipped_count,
-        "current_ticket": current_ticket,
-        "upcomming": upcomming,
-        "announcement_clips": announce_clips
-    })
-    db.close()
-    return response
+        return response
 
 
 # LIVE PANEL
@@ -788,37 +779,32 @@ def call_next(request: Request):
 
 def archive_ticket(ticket_id : int, final_status : str):
     """Shared helper: mark a ticket finished and create its permanent Visit record."""
-    db = SessionLocal()
-    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    with SessionLocal() as db:
+        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
 
-
-    if ticket:
-        ticket.status = final_status
-        ticket.completed_at = datetime.now()
-        
-        visit = Visit(
-            citizen_name = ticket.citizen_name,
-            lane = ticket.lane,
-            ticket_number = ticket.ticket_number,
-            final_status = final_status,
-            service_id = ticket.service_id,
-            created_at = ticket.created_at,
-            called_at = ticket.called_at,
-            completed_at = ticket.completed_at,
-        )
-        db.add(visit)
-        db.commit()
-        
-    db.close()
+        if ticket:
+            ticket.status = final_status
+            ticket.completed_at = datetime.now()
+            
+            visit = Visit(
+                citizen_name = ticket.citizen_name,
+                lane = ticket.lane,
+                ticket_number = ticket.ticket_number,
+                final_status = final_status,
+                service_id = ticket.service_id,
+                created_at = ticket.created_at,
+                called_at = ticket.called_at,
+                completed_at = ticket.completed_at,
+            )
+            db.add(visit)
+            db.commit()
     
 def get_incoming_order(limit: int = 3):
     """Simulate the 2:1 priority:regular call order without actually calling anyone."""
     
-    db = SessionLocal()
-    
-    waiting_priority = db.query(Ticket).filter(Ticket.status == "waiting", Ticket.lane == "P").order_by(Ticket.created_at).all()
-    waiting_regular = db.query(Ticket).filter(Ticket.status == "waiting", Ticket.lane == "R").order_by(Ticket.created_at).all()
-    db.close()
+    with SessionLocal() as db:
+        waiting_priority = db.query(Ticket).filter(Ticket.status == "waiting", Ticket.lane == "P").order_by(Ticket.created_at).all()
+        waiting_regular = db.query(Ticket).filter(Ticket.status == "waiting", Ticket.lane == "R").order_by(Ticket.created_at).all()
     
     upcoming = []
     streak = priority_streak # start from the CURRENT real streak, so the preview matches reality
@@ -848,14 +834,13 @@ def get_incoming_order(limit: int = 3):
 
 @app.post("/skip/{ticket_id}", dependencies=[Depends(login_required)])
 def skip_ticket(request: Request, ticket_id: int):
-    db = SessionLocal()
-    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
     number = None
-    if ticket:
-        ticket.status = "skipped"   # just a status change, NOT archived
-        number = ticket.ticket_number
-        db.commit()
-    db.close()
+    with SessionLocal() as db:
+        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+        if ticket:
+            ticket.status = "skipped"   # just a status change, NOT archived
+            number = ticket.ticket_number
+            db.commit()
     if number:
         log_action("Queue", "Ticket Skipped", f"Skipped {number}", request)
     return RedirectResponse(url="/queue_management", status_code=303)
@@ -888,16 +873,14 @@ def recall_ticket(request: Request, ticket_id: int):
 @app.post("/complete/{ticket_id}", dependencies=[Depends(login_required)])
 def complete_ticket(request: Request, ticket_id: int):
     archive_ticket(ticket_id, "completed")
-    db = SessionLocal()
-    
-    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
     number = None
     
-    if ticket:
-        number = ticket.ticket_number
-        db.delete(ticket)
-        db.commit()
-    db.close()
+    with SessionLocal() as db:
+        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+        if ticket:
+            number = ticket.ticket_number
+            db.delete(ticket)
+            db.commit()
     if number:
         log_action("Queue", "Ticket Completed", f"Marked {number} as completed", request)
     return RedirectResponse(url="/queue_management", status_code=303)
@@ -906,16 +889,14 @@ def complete_ticket(request: Request, ticket_id: int):
 @app.post("/no-show/{ticket_id}", dependencies=[Depends(login_required)])
 def no_show_ticket(request: Request, ticket_id: int):
     archive_ticket(ticket_id, "no_show")   # reuses your existing archive helper - permanent
-    db = SessionLocal()
-        
-    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
     number = None
         
-    if ticket:
-        number = ticket.ticket_number
-        db.delete(ticket)
-        db.commit()
-    db.close()
+    with SessionLocal() as db:
+        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+        if ticket:
+            number = ticket.ticket_number
+            db.delete(ticket)
+            db.commit()
     if number:
         log_action("Queue", "Ticket No-Show", f"Marked {number} as no-show", request)
     return RedirectResponse(url="/queue_management", status_code=303)
@@ -1139,44 +1120,40 @@ def attendance_export(request: Request, date_from: str = "", date_to: str = "", 
 # SERVICE
 @app.get("/services", dependencies=[Depends(login_required)])
 def list_services(request: Request):
-    db = SessionLocal()
-    services = db.query(Service).all()
-    today_start = datetime.combine(date.today(), datetime.min.time())
+    with SessionLocal() as db:
+        services = db.query(Service).all()
+        today_start = datetime.combine(date.today(), datetime.min.time())
                     
-    total_today = db.query(Ticket).filter(Ticket.created_at >= today_start).count()
-    response =  templates.TemplateResponse(request, "services.html", {
-        
-        "services": services,
-        "total_today": total_today
-    })
-    db.close()
-    return response
+        total_today = db.query(Ticket).filter(Ticket.created_at >= today_start).count()
+        return templates.TemplateResponse(request, "services.html", {
+            
+            "services": services,
+            "total_today": total_today
+        })
 
 @app.post("/services/add", dependencies=[Depends(login_required)])
 def add_services(request: Request, service_name: str = Form(...), service_status: StatusEnum = Form(alias="service_status")):
-    db = SessionLocal()
-    new_service = Service(service_name=service_name, service_status=service_status)
-    db.add(new_service)
-    db.commit()
-    db.close()
+    with SessionLocal() as db:
+        new_service = Service(service_name=service_name, service_status=service_status)
+        db.add(new_service)
+        db.commit()
     log_action("Service", "Service Added", f"Added service: {service_name} ({service_status.value})", request)
     return RedirectResponse(url="/services", status_code=303)
 
 @app.post("/services/edit/{service_id}", dependencies=[Depends(login_required)])
 def edit_service(request: Request, service_id: int, service_name: str = Form(...), service_status: StatusEnum = Form(alias="service_status")):
-    db = SessionLocal()
-    service = db.query(Service).filter(Service.id == service_id).first()
     changes = []
     
-    if service:
-        if service.service_name != service_name:
-            changes.append(f'renamed from "{service.service_name}"')
-        if service.service_status != service_status.value:
-            changes.append(f"status {service.service_status} -> {service_status.value}")
-        service.service_name = service_name
-        service.service_status = service_status
-        db.commit()
-    db.close()
+    with SessionLocal() as db:
+        service = db.query(Service).filter(Service.id == service_id).first()
+        if service:
+            if service.service_name != service_name:
+                changes.append(f'renamed from "{service.service_name}"')
+            if service.service_status != service_status.value:
+                changes.append(f"status {service.service_status} -> {service_status.value}")
+            service.service_name = service_name
+            service.service_status = service_status
+            db.commit()
     if changes:   # saving the form without changing anything is not worth a log row
         log_action("Service", "Service Modified", f'Modified service "{service_name}": ' + "; ".join(changes), request)
 
@@ -1355,8 +1332,8 @@ def purge_old_records(request: Request, cutoff: str = Form(...)):
             try:   # hand the freed space back to the disk
                 with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
                     conn.execute(text("VACUUM"))
-            except Exception as e:
-                print(f"VACUUM failed: {e}")
+            except Exception:
+                log.exception("VACUUM failed")
             log_action("Database", "Data Purge",
                        f"Purged {deleted} attendance record(s) from before {cutoff_date.strftime('%b %d, %Y')}", request)
             flash(request, True, f"Purged {deleted} attendance record(s) from before {cutoff_date.strftime('%b %d, %Y')}.")

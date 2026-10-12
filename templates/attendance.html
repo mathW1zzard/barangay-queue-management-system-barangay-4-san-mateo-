@@ -71,7 +71,7 @@
                     <td class="cell-primary">{{ v.ticket_number }}</td>
                     <td class="cell-primary">{{ v.citizen_name }}</td>
                     <td>{{ lane_tag(v.lane) }}</td>
-                    <td>{{ v.service.service_name if v.service else 'Removed service' }}</td>
+                    <td>{{ v.service_label if v.service else 'Removed service' }}</td>
                     <td>{{ v.called_at.strftime('%I:%M %p') if v.called_at else '--' }}</td>
                     <td>{{ v.completed_at.strftime('%I:%M %p') if v.completed_at else '--' }}</td>
                     <td>{{ badge(v.final_status) }}</td>

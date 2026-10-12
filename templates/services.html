@@ -5,6 +5,9 @@
 {% block page_subtitle %}Service configuration{% endblock %}
 {% block description %}To display the services{% endblock %}
 {% block content %}
+{% if message %}
+<div class="alert {{ 'alert-success' if message.ok else 'alert-error' }}" role="{{ 'status' if message.ok else 'alert' }}">{{ message.text }}</div>
+{% endif %}
 <div class="section-head">
     <h2>Services Directory</h2>
     <button type="button" class="btn btn-primary" data-open-modal="add-modal">{{ icon('plus', 18) }} Add service</button>

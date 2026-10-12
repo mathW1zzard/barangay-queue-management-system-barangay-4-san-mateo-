@@ -81,6 +81,49 @@
         });
     });
 
+    // ---------- Double-click guard ----------
+    // After a POST form is submitted once, ignore further submits and grey out its buttons, so a
+    // double click cannot register two tickets or finish the same ticket twice. This covers every
+    // POST form, including the shared confirm dialog.
+    const UNLOCK_AFTER_MS = 15000;   // safety net in case the page never navigates away
+
+    const lockForm = (form) => {
+        form.dataset.submitting = '1';
+        // Disable on the next tick: disabling inside the submit event can cancel the submit itself
+        setTimeout(() => {
+            $$('button', form).forEach((btn) => {
+                if (!btn.disabled) {
+                    btn.disabled = true;
+                    btn.dataset.lockedByGuard = '1';   // remember which ones WE disabled
+                }
+            });
+        }, 0);
+        setTimeout(() => unlockForm(form), UNLOCK_AFTER_MS);
+    };
+
+    const unlockForm = (form) => {
+        delete form.dataset.submitting;
+        $$('button[data-locked-by-guard]', form).forEach((btn) => {
+            btn.disabled = false;   // only the buttons the guard disabled, never ones the page disabled
+            delete btn.dataset.lockedByGuard;
+        });
+    };
+
+    document.addEventListener('submit', (e) => {
+        const form = e.target;
+        if (!(form instanceof HTMLFormElement) || form.method.toLowerCase() !== 'post') return;
+        if (form.dataset.submitting) {
+            e.preventDefault();   // second click / second Enter press: ignore it
+            return;
+        }
+        lockForm(form);
+    }, true);
+
+    // Pressing the browser's Back button can restore the page frozen with locked buttons
+    window.addEventListener('pageshow', (e) => {
+        if (e.persisted) $$('form[data-submitting]').forEach(unlockForm);
+    });
+
     // ---------- "I saved this" checkbox unlocks a link ----------
     $$('[data-unlocks]').forEach((box) => {
         const link = document.getElementById(box.dataset.unlocks);

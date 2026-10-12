@@ -46,7 +46,7 @@
             <hr>
             <dl class="slip-details">
                 <div class="slip-row"><dt>Client name</dt><dd>{{ ticket.citizen_name }}</dd></div>
-                <div class="slip-row"><dt>Service</dt><dd>{{ ticket.service.service_name }}</dd></div>
+                <div class="slip-row"><dt>Service</dt><dd>{{ ticket.service_label }}</dd></div>
                 <div class="slip-row"><dt>Date and time</dt><dd>{{ ticket.created_at.strftime('%b %d, %Y %I:%M %p') }}</dd></div>
             </dl>
             <hr>

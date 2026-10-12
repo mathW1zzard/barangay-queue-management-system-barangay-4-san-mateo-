@@ -20,7 +20,7 @@
             <div class="serving-person">
                 <p class="label">Current Visitor Name</p>
                 <h3>{{ current_ticket.citizen_name }}</h3>
-                <p class="hint">Requested service: <strong class="service-name">{{ current_ticket.service.service_name }}</strong></p>
+                <p class="hint">Requested service: <strong class="service-name">{{ current_ticket.service_label }}</strong></p>
             </div>
         </div>
 
@@ -115,7 +115,7 @@
                     <td class="cell-primary">{{ ticket.ticket_number }}</td>
                     <td class="cell-primary">{{ ticket.citizen_name }}</td>
                     <td>{{ lane_tag(ticket.lane) }}</td>
-                    <td>{{ ticket.service.service_name }}</td>
+                    <td>{{ ticket.service_label }}</td>
                     <td>{{ badge(ticket.status) }}</td>
                     <td>
                         {% if ticket.status == "skipped" %}
@@ -168,9 +168,7 @@
     if (announcementClips.length > 0) {
         playAnnouncement();
     }
-    // Reload when the server announces a queue change
-    const socket = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/display");
-    socket.onmessage = () => location.reload();
+    
 </script>
 {% endblock %}
 

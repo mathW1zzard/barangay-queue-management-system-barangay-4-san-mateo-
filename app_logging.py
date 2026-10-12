@@ -11,7 +11,13 @@ LOG_FILE = Path(data_path("app.log"))
 log = logging.getLogger("barangay")   # use in the app: log.info / log.warning / log.exception
 _configured = False
 
-
+class _IgnoreWindowsReset(logging.Filter):
+    """The WebView closing a connection raises WinError 10054 inside asyncio. It's harmless noise
+    that buries real errors, so drop that one case only."""
+    def filter(self, record):
+        exc = record.exc_info[1] if record.exc_info else None
+        return not (isinstance(exc, ConnectionResetError) and getattr(exc, "winerror", None) == 10054)
+    
 def setup_logging():
     """Safe to call more than once; only the first call does anything."""
     global _configured
@@ -55,3 +61,4 @@ def setup_logging():
     threading.excepthook = log_thread_error
 
     log.info("Logging started")
+    logging.getLogger("asyncio").addFilter(_IgnoreWindowsReset())

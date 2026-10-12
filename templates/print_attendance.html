@@ -326,7 +326,7 @@
                     <td><strong>{{ v.ticket_number }}</strong></td>
                     <td><strong>{{ v.citizen_name }}</strong></td>
                     <td class="muted">{% if v.lane == "P" %}Priority{% else %}Regular{% endif %}</td>
-                    <td class="muted">{{ v.service.service_name }}</td>
+                    <td class="muted">{{ v.service_label }}</td>
                     <td class="muted">{{ v.called_at.strftime('%I:%M %p') if v.called_at else '--' }}</td>
                     <td class="muted">{{ v.completed_at.strftime('%I:%M %p') if v.completed_at else '--' }}</td>
                     <td class="st-{{ v.final_status }}">

@@ -1,17 +1,24 @@
 # Python cache
 __pycache__/
-*.pyc
+*.pyc[cod]
 
 # Build output
 build/
 dist/
 installer_output/
 
-# Runtime data
+# Runtime database files
 *.db
+*.db-*
+*.bak
+backups/
+
+# Secrets and logs
+*.key
+app.log*
+backup_folder.txt
 last_ticket_printed.txt
 
-# Environments and editor
+# Virtual environments
 .venv/
 venv/
-.vscode/

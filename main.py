@@ -12,6 +12,7 @@ from paths import resource_path, data_path
 from datetime import datetime, date, time, timedelta
 from starlette.middleware.sessions import SessionMiddleware
 from enum import Enum
+import threading
 from fastapi import WebSocket, WebSocketDisconnect
 from escpos.printer import Dummy, Win32Raw
 from collections import Counter
@@ -24,23 +25,84 @@ import sqlite3
 import asyncio
 import math
 import re
+import os
+from time import monotonic          
+from urllib.parse import urlparse
+from contextlib import asynccontextmanager
+from sqlalchemy.exc import IntegrityError
 
 # For authentication(recovery key)
 import secrets
 import string
 
-app = FastAPI()
+main_loop: asyncio.AbstractEventLoop | None = None
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    global main_loop
+    main_loop = asyncio.get_running_loop()        # remember uvicorn's loop for worker threads
+    yield
+
+app = FastAPI(lifespan=lifespan)
+
 def load_secret_key() -> str:
     key_file = Path(data_path("session_secret.key"))
-    if not key_file.exists():
-        key_file.write_text(secrets.token_hex(32))
-    return key_file.read_text().strip()
+    try:
+        key = key_file.read_text(encoding="utf-8").strip()
+        if len(key) >= 64:
+            return key
+        log.warning("Session secret was damaged; generating a new one.")
+    except OSError:
+        pass                                   # missing file: first run
 
-app.add_middleware(SessionMiddleware, secret_key=load_secret_key())
+    key = secrets.token_urlsafe(64)
+    tmp = key_file.with_suffix(".tmp")
+    tmp.write_text(key, encoding="utf-8")
+    os.replace(tmp, key_file)                  # atomic: never leaves a half-written key
+    return key
+
+app.add_middleware(SessionMiddleware,
+    secret_key=load_secret_key(),
+    same_site="lax",
+    max_age=8 * 60 * 60,
+)
+
+@app.middleware("http")
+async def block_cross_origin_posts(request: Request, call_next):
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        origin = request.headers.get("origin")
+        if origin and urlparse(origin).netloc != request.headers.get("host", ""):
+            return Response("Cross-origin request blocked", status_code=403)
+    return await call_next(request)
 
 templates = Jinja2Templates(directory=resource_path("templates"))
-priority_streak = 0
+
 PAGE_SIZE = 15
+
+def render_registration(request: Request, error: str | None = None, form: dict | None = None, status_code: int = 200):
+    with SessionLocal() as db:
+        today_start = datetime.combine(date.today(), time.min)
+        tickets = db.query(Ticket).filter(Ticket.created_at >= today_start).order_by(desc(Ticket.created_at)).all()
+        services = db.query(Service).filter(Service.service_status == "Active").all()
+        return templates.TemplateResponse(request, "client_registration.html", {
+            "tickets": tickets, "services": services, "total_today": len(tickets),
+            "queue_info": queue_snapshot(), "error": error, "form": form,
+        }, status_code=status_code)
+
+
+def current_priority_streak(db) -> int:
+    """Consecutive Priority calls at the end of today's call order (0, 1 or 2).
+    Derived from called_at, so a restart cannot reset it."""
+    start = datetime.combine(date.today(), time.min)
+    calls = (db.query(Ticket.lane, Ticket.called_at).filter(Ticket.called_at >= start).all()
+             + db.query(Visit.lane, Visit.called_at).filter(Visit.called_at >= start).all())
+    streak = 0
+    for lane, _ in sorted(calls, key=lambda r: r[1], reverse=True)[:2]:
+        if lane != "P":
+            break
+        streak += 1
+    return streak
 
 # ADMIN LOGS
 LOG_CATEGORIES = ["Queue", "Service", "Settings", "Security", "Database"]
@@ -50,9 +112,18 @@ NOT_SIGNED_IN = "(not signed in)" # who gets blamed for failed logins
 active_admin_id = None
 SESSION_EVENTS = ("Login", "Logout", "Session Closed", "Session Interrupted")
 
+# DAILY ROLLOVER (tickets left over from a previous day)
+last_rollover_date = None            # the day the cleanup last ran in this session
+rollover_lock = threading.Lock()
+
 # MAINTENANCE
 BACKUP_DIR_DEFAULT = Path(data_path("backups"))
 PURGE_MIN_AGE_DAYS = 30 # safety: records newer than this can never be purged
+
+# AUTOMATIC BACKUPS
+AUTO_BACKUP_KEEP_DAYS = 14   # keep the newest automatic backup of each of the last 14 days that have one
+AUTO_BACKUP_NAME = re.compile(r"^auto_(\d{8})_\d{6}\.db$")   # the ONLY file names cleanup may ever delete
+EXTRA_BACKUP_SETTING = Path(data_path("backup_folder.txt"))   # one line: full path of a second backup folder
 
 def flash(request: Request, ok: bool, text_: str):
     """One-time message shown on the next page load (stored in the session cookie)."""
@@ -85,6 +156,15 @@ def log_action(category: str, action: str, description: str = "", request: Reque
     except Exception:
         log.exception("Audit log failed")
 
+def log_action_throttled(request: Request, category: str, action: str, description: str, seconds: int = 60):
+    """Log at most once per `seconds` per session for the same action (refreshing a page is not a new event)."""
+    now = datetime.now().timestamp()
+    key = f"last_log_{action}"
+    if now - request.session.get(key, 0) < seconds:
+        return
+    request.session[key] = now
+    log_action(category, action, description, request)
+    
 def log_app_start():
     """Run once when the program starts (called from run_app.py).
 
@@ -138,7 +218,167 @@ def parse_date(value: str):
     except ValueError:
         return None
 
+def archive_stale_tickets() -> int:
+    """Tickets registered on an earlier day can never be served today (numbers restart every day).
 
+    Save each one in attendance history as a no-show, on the day it was registered, and remove it
+    from the live queue. All in one transaction. Returns how many tickets were archived.
+    """
+
+    today_start = datetime.combine(date.today(), time.min)
+    with SessionLocal() as db:
+        stale = db.query(Ticket).filter(
+            Ticket.created_at < today_start,
+            Ticket.status.in_(["waiting", "called", "skipped"]),
+        ).all()
+        if not stale:
+            return 0
+
+        counts = Counter(t.status for t in stale)
+        days = sorted({t.created_at.date() for t in stale})
+        total = len(stale)
+        for t in stale:
+            db.add(Visit(
+                citizen_name=t.citizen_name, lane=t.lane, ticket_number=t.ticket_number,
+                final_status="no_show", service_id=t.service_id,
+                created_at=t.created_at,      # stays on the day it was registered
+                called_at=t.called_at,
+                completed_at=None,            # never served, so no time out ("--" on the pages)
+            ))
+            db.delete(t)
+        db.commit()
+
+    log_action("Queue", "Old Tickets Archived",
+               f"{total} ticket(s) left over from {range_label(days[0], days[-1])} were saved as no-show "
+               f"({counts['waiting']} waiting, {counts['called']} called, {counts['skipped']} skipped)",
+               username="system")
+    return total
+
+def create_backup_file(target_dir: Path, prefix: str) -> Path:
+    """Copy the live database into target_dir with SQLite's backup API, then check the copy.
+
+    It is written under a temporary name and renamed only when the check passes, so a half-written
+    file (power cut, unplugged drive) can never be mistaken for a real backup. Raises on any problem.
+    """
+    stamp = f"{datetime.now():%Y%m%d_%H%M%S}"
+    target, n = target_dir / f"{prefix}{stamp}.db", 1
+    while target.exists():
+        target = target_dir / f"{prefix}{stamp}_{n}.db"
+        n += 1
+    
+    temp = target.with_suffix(".tmp")
+    try:
+        source = sqlite3.connect(data_path("barangay_system.db"))
+        try:
+            dest = sqlite3.connect(str(temp))
+            try:
+                source.backup(dest)
+                verdict = dest.execute("PRAGMA quick_check").fetchone()[0]
+            finally:
+                dest.close()
+        finally:
+            source.close()
+        if verdict != "ok":
+            raise RuntimeError(f"the copy failed its integrity check ({verdict})")
+        temp.replace(target)
+    except Exception:
+        temp.unlink(missing_ok=True)
+        raise
+    return target
+
+
+def get_extra_backup_dir():
+    """The optional second backup folder (an external drive, say), or None."""
+    try:
+        value = EXTRA_BACKUP_SETTING.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return Path(value) if value else None
+
+
+def list_auto_backups(folder: Path):
+    """Our own automatic backups in a folder, newest first."""
+    try:
+        files = [f for f in folder.iterdir() if f.is_file() and AUTO_BACKUP_NAME.match(f.name)]
+    except OSError:
+        return []
+    return sorted(files, key=lambda f: f.name, reverse=True)   # the names start with the date and time
+
+
+def prune_auto_backups(folder: Path):
+    """Keep the newest automatic backup of each of the last AUTO_BACKUP_KEEP_DAYS days that have one.
+
+    Only files named exactly like our automatic backups are touched: manual backups and anything
+    else in the folder are never deleted. A day without a backup is skipped, not counted, so a
+    long break from using the app never wipes out the only backups.
+    """
+    try:
+        kept_days = set()
+        for f in list_auto_backups(folder):   # newest first
+            day = AUTO_BACKUP_NAME.match(f.name).group(1)
+            if day not in kept_days and len(kept_days) < AUTO_BACKUP_KEEP_DAYS:
+                kept_days.add(day)            # the newest backup of a recent day: keep
+            else:
+                f.unlink(missing_ok=True)     # an older backup of the same day, or a day past the limit
+        for leftover in folder.glob("auto_*.tmp"):
+            leftover.unlink(missing_ok=True)  # a backup that was interrupted half way
+    except OSError:
+        log.exception("Cleaning up old backups failed")
+
+
+def auto_backup(reason: str) -> bool:
+    """Make an automatic backup, plus a copy in the second folder if one is set. Never raises.
+
+    Returns True if at least one copy was saved. Everything is recorded in the audit log.
+    """
+    saved, problems = [], []
+
+    try:
+        BACKUP_DIR_DEFAULT.mkdir(parents=True, exist_ok=True)
+        saved.append(str(create_backup_file(BACKUP_DIR_DEFAULT, "auto_")))
+        prune_auto_backups(BACKUP_DIR_DEFAULT)
+    except Exception as e:
+        log.exception("Automatic backup failed")
+        problems.append(f"backup failed: {e}")
+
+    extra = get_extra_backup_dir()
+    if extra:
+        try:
+            if not extra.is_dir():
+                raise FileNotFoundError(f"folder not found: {extra}")
+            saved.append(str(create_backup_file(extra, "auto_")))
+            prune_auto_backups(extra)
+        except Exception as e:
+            log.exception("Automatic backup copy failed")
+            problems.append(f"copy to {extra} failed: {e}")
+
+    if saved:
+        log_action("Database", "Auto Backup", f"{reason}: saved " + "; ".join(saved), username="system")
+    if problems:
+        log_action("Database", "Backup Failed", f"{reason}: " + "; ".join(problems), username="system")
+    return bool(saved)
+
+def ensure_daily_rollover():
+    """Runs the cleanup above once per calendar day, whenever the first page of that day is opened.
+
+    This also covers a computer that stays on past midnight. After the first run of the day it costs
+    one date comparison.
+    """
+    global last_rollover_date
+    today = date.today()
+    if last_rollover_date == today:
+        return
+    with rollover_lock:
+        if last_rollover_date == today:
+            return
+        auto_backup("Daily backup")        # snapshot first, before anything is archived
+        try:
+            archive_stale_tickets()
+        except Exception:
+            log.exception("Daily rollover failed")
+            return
+        last_rollover_date = today
+        
 def active_queue_today():
     """Tickets registered today that are still in the queue."""
     db = SessionLocal()
@@ -165,50 +405,57 @@ app.mount("/static", StaticFiles(directory=resource_path("static")), name="stati
 # WEBSOCKET
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: list[WebSocket] = []
+        self.active: set[WebSocket] = set()
         
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
-        self.active_connections.append(websocket)
+        self.active.add(websocket)
         
     def disconnect(self, websocket: WebSocket):
-            self.active_connections.remove(websocket)
+            self.active.discard(websocket)
             
     async def broadcast(self, message: str):
-        for connection in self.active_connections:
-            await connection.send_text(message)
+        dead = []
+        for ws in list(self.active):              # iterate a copy
+            try:
+                await ws.send_text(message)
+            except Exception:
+                dead.append(ws)                   # one bad socket no longer stops the rest
+        for ws in dead:
+            self.active.discard(ws)
+            
 manager = ConnectionManager()
 
 @app.websocket("/ws/display")
 async def websocket_display(websocket: WebSocket):
+    origin = websocket.headers.get("origin")
+    if origin and urlparse(origin).netloc != websocket.headers.get("host", ""):
+        await websocket.close(code=1008)          # refuse pages from other origins
+        return
     await manager.connect(websocket)
     try:
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
+        pass
+    finally:
+        manager.disconnect(websocket)             # also runs on unexpected errors, so no leak
+
 
 def notify_display_update():
-    asyncio.run(manager.broadcast("update"))
+    """Safe to call from the normal (threaded) routes."""
+    if main_loop is not None and main_loop.is_running():
+        asyncio.run_coroutine_threadsafe(manager.broadcast("update"), main_loop)
     
 # ANNOUNCEMENT AUDIO
 def build_announcement_clips(ticket_number: str):
     """Convert a ticket number such as P-047 into a list of reusable audio clips."""
 
-    letter, digits = ticket_number.split("-")
-
-    clips = [
-        "ticket_number",
-        f"letters/{letter}"
-    ]
-    clips += [
-        f"digits/{digit}"
-        for digit in digits
-    ]
-
-    clips.append("proceed_to_counter")
-
-    return clips
+    m = TICKET_RE.match(ticket_number or "")
+    if not m:
+        return []
+    letter, digits = m.groups()
+    return ["ticket_number", f"letters/{letter}", *[f"digits/{d}" for d in digits], "proceed_to_counter"]
 
        
 # True  = the slip prints by itself when a ticket is registered (the confirmation page then
@@ -268,7 +515,19 @@ def print_ticket(ticket_number: str, citizen_name: str, service_name: str, lane:
         log_action("Settings", "Print Error", f"Ticket slip {ticket_number} failed to print: {e}", username="system")
         return False
 
+_CTRL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+TICKET_RE = re.compile(r"^([PR])-(\d{1,4})$")
 
+def clean_text(value: str, max_len: int) -> str:
+    """Strips control characters (they would reach the ESC/POS printer), collapses whitespace, caps length."""
+    return " ".join(_CTRL.sub(" ", value or "").split())[:max_len]
+
+def parse_optional_int(value: str):
+    try:
+        return int(value) if value and value.strip() else None
+    except ValueError:
+        return None
+    
 @app.get("/")
 def read_root():
     with SessionLocal() as db:
@@ -290,27 +549,38 @@ def show_setup(request: Request):
 
 @app.post("/setup")
 def process_setup(request: Request, username: str = Form(...), password: str = Form(...), confirm_password: str = Form(...)):
+    username = clean_text(username, 50)
+    
+    if not username: 
+        return templates.TemplateResponse(request, "setup1.html",{"error": "Username is required."}, status_code=400)
+
+    error = validate_new_password(password, confirm_password)
+
+    if error:
+        return templates.TemplateResponse(request, "setup1.html", {"error": error},status_code=400)
+
+    recovery_key = generate_recovery_key()
     db = SessionLocal()
     try:
-        # 1. Setup already done -> never create a second admin
+        # Acquire a write reservation before checking for an admin.
+        db.execute(text("BEGIN IMMEDIATE"))
+
         if db.query(Admin).first() is not None:
+            db.rollback()
+
             return RedirectResponse(url="/login", status_code=303)
-        
-        # 2. Validate input
-        if password != confirm_password:
-            return templates.TemplateResponse(request, "setup1.html", {"error": "Passwords do not match"})
-
-        if len(password) < 8:
-            return templates.TemplateResponse(request, "setup1.html", {"error": "Password must be at least 8 characters"})
-
-        # 3. Create the admin
-        recovery_key = generate_recovery_key()
-        password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-        recovery_key_hash = bcrypt.hashpw(recovery_key.encode(), bcrypt.gensalt()).decode()
             
-        new_admin = Admin(username=username, password_hash=password_hash, recovery_key_hash=recovery_key_hash)
+        new_admin = Admin(username=username, password_hash=hash_password(password), recovery_key_hash=hash_password(recovery_key))
         db.add(new_admin)
         db.commit()
+        
+    except IntegrityError:
+        db.rollback()
+        return templates.TemplateResponse(request,"setup1.html",{"error": "The account could not be created. Please try again."}, status_code=409)
+
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
     log_action("Security", "Account Created", f'Created admin account "{username}" (first-time setup)', username=username)
@@ -326,19 +596,28 @@ def show_login(request: Request):
 
 @app.post("/login")
 def process_login(request: Request, username: str = Form(...), password: str = Form(...)):
+    wait = throttle_wait("login")
+    if wait:
+        return templates.TemplateResponse(request, "login.html",
+            {"error": f"Too many failed attempts. Try again in {wait} seconds."}, status_code=429)
+
     with SessionLocal() as db:
         admin = db.query(Admin).filter(Admin.username == username).first()
 
-    if not admin or not bcrypt.checkpw(password.encode(), admin.password_hash.encode()):
-        log_action("Security", "Login Failed", f'Failed login attempt for username "{username[:50]}"', username=NOT_SIGNED_IN)
+    if not check_password(password, admin.password_hash if admin else None):
+        record_failure("login")
+        log_action("Security", "Login Failed",
+                   f'Failed login attempt for username "{username[:50]}"', username=NOT_SIGNED_IN)
         return templates.TemplateResponse(request, "login.html", {"error": "Invalid username or password"})
 
+    clear_failures("login")
     global active_admin_id
+    request.session.clear()
     request.session["admin_id"] = admin.id
+    request.session["pwv"] = password_fingerprint(admin.password_hash)
     active_admin_id = admin.id
     log_action("Security", "Login", "Signed in", username=admin.username)
     return RedirectResponse(url="/dashboard", status_code=303)
-
 
 
 @app.get("/forgot-password")
@@ -353,29 +632,36 @@ def process_forgot_password(
     new_password: str = Form(...),
     confirm_password: str = Form(...),
 ):
+    wait = throttle_wait("recovery")
+    if wait:
+        return templates.TemplateResponse(request, "forgot_password.html",
+            {"error": f"Too many attempts. Try again in {wait} seconds."}, status_code=429)
+
+    error, new_recovery_key = None, None
     with SessionLocal() as db:
         admin = db.query(Admin).filter(Admin.username == username).first()
+        stored = admin.recovery_key_hash if admin else None
+        if not check_password(recovery_key.strip().upper(), stored):
+            error = "Invalid username or recovery key"
+        else:
+            error = validate_new_password(new_password, confirm_password)
 
-    error = None
-    if not admin or not admin.recovery_key_hash or not bcrypt.checkpw(recovery_key.encode(), admin.recovery_key_hash.encode()):
-        error = "Invalid username or recovery key"
-    elif new_password != confirm_password:
-        error = "Passwords do not match"
-    elif len(new_password) < 8:
-        error = "Password must be at least 8 characters"
+        if not error:
+            new_recovery_key = generate_recovery_key()
+            admin.password_hash = hash_password(new_password)
+            admin.recovery_key_hash = hash_password(new_recovery_key)
+            db.commit()          # `admin` is still attached to `db` here, so this really saves
 
-    if not error:
-        # Reset password AND issue a brand new recovery key (the old one was just used, so retire it)
-        new_recovery_key = generate_recovery_key()
-        admin.password_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
-        admin.recovery_key_hash = bcrypt.hashpw(new_recovery_key.encode(), bcrypt.gensalt()).decode()
-        db.commit()
     if error:
-        if error.startswith("Invalid username"):
-            log_action("Security", "Recovery Failed", f'Failed password reset attempt for username "{username[:50]}"', username=NOT_SIGNED_IN)
+        if error.startswith("Invalid"):
+            record_failure("recovery")
+            log_action("Security", "Recovery Failed",
+                       f'Failed password reset attempt for username "{username[:50]}"', username=NOT_SIGNED_IN)
         return templates.TemplateResponse(request, "forgot_password.html", {"error": error})
 
-    log_action("Security", "Password Reset", "Password reset using the recovery key; a new recovery key was issued", username=username)
+    clear_failures("recovery")
+    log_action("Security", "Password Reset",
+               "Password reset using the recovery key; a new recovery key was issued", username=username)
     return templates.TemplateResponse(request, "recovery_key_display.html", {"recovery_key": new_recovery_key})
 
 @app.post("/logout")
@@ -396,12 +682,19 @@ async def not_authenticated_handler(request: Request, exc: NotAuthenticated):
 
 
 def login_required(request: Request):
-    """Use as dependencies=[Depends(login_required)] on every staff-only route."""
-    if "admin_id" not in request.session:
+    admin_id = request.session.get("admin_id")
+    if not admin_id:
+        raise NotAuthenticated()
+    with SessionLocal() as db:
+        admin = db.get(Admin, admin_id)
+        valid = (admin is not None
+                 and request.session.get("pwv") == password_fingerprint(admin.password_hash))
+    if not valid:                         # account deleted, or password changed/reset elsewhere
+        request.session.clear()
         raise NotAuthenticated()
     global active_admin_id
-    active_admin_id = request.session["admin_id"]
-
+    active_admin_id = admin_id
+    ensure_daily_rollover()
 
 @app.get("/change-password", dependencies=[Depends(login_required)])
 def show_change_password(request: Request):
@@ -444,7 +737,54 @@ def generate_recovery_key():
     groups = ["".join(secrets.choice(chars) for _ in range(4)) for _ in range(3)]
     return "BQS-" + "-".join(groups)
 
+MAX_PASSWORD_BYTES = 72                      # bcrypt's hard limit
+_DUMMY_HASH = bcrypt.hashpw(b"timing-equaliser", bcrypt.gensalt()).decode()
 
+def hash_password(plain: str) -> str:
+    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
+
+def check_password(plain: str, hashed: str | None) -> bool:
+    raw = plain.encode()
+    if len(raw) > MAX_PASSWORD_BYTES:
+        return False                         # never reaches bcrypt, so no 500
+    ok = bcrypt.checkpw(raw, (hashed or _DUMMY_HASH).encode())   # same cost for unknown users
+    return ok and hashed is not None
+
+def validate_new_password(new: str, confirm: str) -> str | None:
+    if new != confirm:
+        return "Passwords do not match"
+    if len(new) < 8:
+        return "Password must be at least 8 characters"
+    if len(new.encode()) > MAX_PASSWORD_BYTES:
+        return "Password is too long (72 bytes at most)"
+    return None
+
+def password_fingerprint(password_hash: str) -> str:
+    return password_hash[-16:]               # changes whenever the password changes
+
+# Throttle: 5 failures per 5 minutes per action
+THROTTLE_MAX_FAILURES, THROTTLE_WINDOW_SECONDS = 5, 60
+_failures: dict[str, list[float]] = {}
+_failures_lock = threading.Lock()
+
+def throttle_wait(key: str) -> int:
+    now = monotonic()
+    with _failures_lock:
+        recent = [t for t in _failures.get(key, []) if now - t < THROTTLE_WINDOW_SECONDS]
+        _failures[key] = recent
+        if len(recent) >= THROTTLE_MAX_FAILURES:
+            return int(THROTTLE_WINDOW_SECONDS - (now - recent[0])) + 1
+    return 0
+
+def record_failure(key: str):
+    with _failures_lock:
+        _failures.setdefault(key, []).append(monotonic())
+
+def clear_failures(key: str):
+    with _failures_lock:
+        _failures.pop(key, None)
+        
+        
 def get_current_admin(request: Request):
     admin_id = request.session.get("admin_id")
     if not admin_id:
@@ -513,7 +853,7 @@ def show_dashboard(request: Request):
             overview.append({
                 "ticket_number": t.ticket_number,
                 "citizen_name": t.citizen_name,
-                "service_name": t.service.service_name,
+                "service_name": t.service_label,
                 "status": t.status,
                 "sort_time": t.called_at or t.created_at,
             })
@@ -521,7 +861,7 @@ def show_dashboard(request: Request):
             overview.append({
                 "ticket_number": v.ticket_number,
                 "citizen_name": v.citizen_name,
-                "service_name": v.service.service_name,
+                "service_name": v.service_label,
                 "status": v.final_status,
                 "sort_time": v.completed_at or v.created_at,
             })
@@ -544,19 +884,7 @@ def show_dashboard(request: Request):
 
 @app.get("/client_registration", dependencies=[Depends(login_required)])
 def show_registration(request: Request):
-    with SessionLocal() as db:
-        today_start = datetime.combine(date.today(), datetime.min.time())
-
-        tickets = db.query(Ticket).filter(Ticket.created_at >= today_start) \
-            .order_by(desc(Ticket.created_at)).all()
-        services = db.query(Service).filter(Service.service_status == "Active").all()
-
-        return templates.TemplateResponse(request, "client_registration.html", {
-            "tickets": tickets,
-            "services": services,
-            "total_today": len(tickets),
-            "queue_info": queue_snapshot()
-        })
+    return render_registration(request)
 
 def queue_snapshot() -> dict:
     """Numbers for the Live Queue panel on the registration page."""
@@ -591,49 +919,34 @@ def queue_snapshot() -> dict:
     }
 
 @app.post("/register", dependencies=[Depends(login_required)])
-def register_ticket(citizen_name: str =  Form(...), lane: str = Form(...), service_id: int = Form(...)):
-    citizen_name = citizen_name.strip()
-    if not citizen_name:
-        raise HTTPException(status_code=400, detail="Client name is required.")
+def register_ticket(request: Request, citizen_name: str = Form(""), lane: str = Form(""), service_id: str = Form("")):
+    form = {"citizen_name": citizen_name, "lane": lane, "service_id": service_id}
+    name, sid = clean_text(citizen_name, 100), parse_optional_int(service_id)
+    if not name:
+        return render_registration(request, "Client name is required.", form, 400)
     if lane not in ("P", "R"):
-        raise HTTPException(status_code=400, detail="Invalid lane.")
+        return render_registration(request, "Please choose Priority or Regular.", form, 400)
+    if sid is None:
+        return render_registration(request, "Please choose a service.", form, 400)
 
-    db = SessionLocal()
-    try:
-        # Only active services can be queued for
-        service = db.query(Service).filter(Service.id == service_id, Service.service_status == "Active").first()
+    with SessionLocal() as db:
+        service = db.query(Service).filter(Service.id == sid, Service.service_status == "Active").first()
         if service is None:
-            raise HTTPException(status_code=400, detail="Selected service is unavailable.")
+            return render_registration(request, "Selected service is unavailable.", form, 400)
         service_name = service.service_name
-
-        today_start = datetime.combine(date.today(), datetime.min.time())  # 00:00:00 today
-
-        # Use the highest number already handed out today, not a row count.
-        # A count would hand out a duplicate number once a ticket has been deleted.
-        used_numbers = [
-            row[0] for row in db.query(Ticket.ticket_number)
-            .filter(Ticket.lane == lane, Ticket.created_at >= today_start).all()
-        ] + [
-            row[0] for row in db.query(Visit.ticket_number)
-            .filter(Visit.lane == lane, Visit.created_at >= today_start).all()
-        ]
-        ticket_number = next_ticket_number(lane, used_numbers)
+        ticket_number = issue_ticket_number(db, lane)           # from #2
         created_at = datetime.now()
-
-        ticket = Ticket(citizen_name=citizen_name, lane=lane, service_id=service_id,
+        ticket = Ticket(citizen_name=name, lane=lane, service_id=sid,
                         ticket_number=ticket_number, created_at=created_at)
         db.add(ticket)
         db.commit()
         ticket_id = ticket.id
-    finally:
-        db.close()
 
-    # Redirect instead of rendering here: a browser refresh then reloads the confirmation
-    # page and cannot submit the form (and create a second ticket) again.
     url = f"/client_registration/confirmation/{ticket_id}"
     if AUTO_PRINT_ON_REGISTER:
-        sent = print_ticket(ticket_number, citizen_name, service_name, lane, created_at)
+        sent = print_ticket(ticket_number, name, service_name, lane, created_at)
         url += f"?printed={1 if sent else 0}"
+    notify_display_update()
     return RedirectResponse(url=url, status_code=303)
 
 @app.get("/client_registration/confirmation/{ticket_id}", dependencies=[Depends(login_required)])
@@ -662,7 +975,7 @@ def print_ticket_again(request: Request, ticket_id: int):
             return RedirectResponse(url="/client_registration", status_code=303)
         number = ticket.ticket_number
         sent = print_ticket(ticket.ticket_number, ticket.citizen_name,
-                            ticket.service.service_name, ticket.lane, ticket.created_at)
+                            ticket.service_label, ticket.lane, ticket.created_at)
     finally:
         db.close()
     log_action("Queue", "Slip Reprinted", f"Reprinted slip for {number}" + ("" if sent else " (printer error)"), request)
@@ -671,38 +984,33 @@ def print_ticket_again(request: Request, ticket_id: int):
         status_code=303,
     )
 
-
-def next_ticket_number(lane: str, used_numbers):
-    """Next number for a lane, e.g. R-004, given every number already used today."""
-    highest = 0
-    for number in used_numbers:
-        try:
-            highest = max(highest, int(str(number).split("-")[-1]))
-        except ValueError:
-            continue
-    return f"{lane}-{highest + 1:03d}"
-
+def issue_ticket_number(db, lane: str) -> str:
+    """Next number for today's lane. The write takes SQLite's lock, which is held until commit,
+    so two registrations can never receive the same number and numbers are never reused."""
+    n = db.execute(text("""
+        INSERT INTO daily_counters (day, lane, last_number) VALUES (:day, :lane, 1)
+        ON CONFLICT (day, lane) DO UPDATE SET last_number = last_number + 1
+        RETURNING last_number"""),
+        {"day": date.today().isoformat(), "lane": lane}).scalar_one()
+    return f"{lane}-{n:03d}"
 
 @app.post("/tickets/delete/{ticket_id}", dependencies=[Depends(login_required)])
 def delete_ticket(request: Request, ticket_id: int):
     """Remove a ticket from the live queue. Nothing is written to attendance history."""
-    db = SessionLocal()
-    number = status = None
-    try:
-        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    with SessionLocal() as db:
+        ticket = db.query(Ticket).filter(Ticket.id == ticket_id, Ticket.status == "waiting").first()
+        number = ticket.ticket_number if ticket else None
         if ticket:
-            number, status = ticket.ticket_number, ticket.status
             db.delete(ticket)
             db.commit()
-    finally:
-        db.close()
     if number:
-        log_action("Queue", "Ticket Deleted", f"Removed {number} (was {status}) from the live queue; not saved to attendance", request)
+        log_action("Queue", "Ticket Deleted", f"Removed waiting ticket {number}; not saved to attendance", request)
+        notify_display_update()
     return RedirectResponse(url="/client_registration", status_code=303)
 
 # QUEUE MANAGEMENT
 @app.get("/queue_management", dependencies=[Depends(login_required)])
-def show_queue(request: Request, announce: str = ""):
+def show_queue(request: Request):
     with SessionLocal() as db:
         tickets = db.query(Ticket).all()
         services = db.query(Service).all()
@@ -721,11 +1029,9 @@ def show_queue(request: Request, announce: str = ""):
                 
         total_today = db.query(Ticket).filter(Ticket.created_at >= today_start).count()
         
-        announce_clips = []
-        
-        if announce:
-            announce_clips = build_announcement_clips(announce)
-            
+        announce = request.session.pop("announce", None)        # one-shot: gone after this page load
+        announce_clips = build_announcement_clips(announce) if announce else []      
+              
         response =  templates.TemplateResponse(request, "queue_management.html", {
             
             "total_today": total_today,
@@ -746,159 +1052,140 @@ def show_queue(request: Request, announce: str = ""):
 # LIVE PANEL
 @app.post("/call-next", dependencies=[Depends(login_required)])
 def call_next(request: Request):
-    global priority_streak
-    db = SessionLocal()
-    try:
-        # Don't allow calling a new ticket while one is already being served
-        if db.query(Ticket).filter(Ticket.status == "called").first():
-            return RedirectResponse(url="/queue_management", status_code=303)
-
-        # Same logic as the "Up Next" preview, so they can never disagree
-        upcoming = get_incoming_order(limit=1)
-        if not upcoming:
-            return RedirectResponse(url="/queue_management", status_code=303)
-
-        next_ticket = db.query(Ticket).filter(Ticket.id == upcoming[0].id).first()
-
-        # Update the streak the same way the preview does
-        if next_ticket.lane == "P":
-            priority_streak += 1
-        else:
-            priority_streak = 0
-
-        next_ticket.status = "called"
-        next_ticket.called_at = datetime.now()
-        number = next_ticket.ticket_number
+    upcoming = get_incoming_order(limit=1)
+    if not upcoming:
+        return RedirectResponse(url="/queue_management", status_code=303)
+    target = upcoming[0]
+    with SessionLocal() as db:
+        claimed = db.execute(_CLAIM, {"id": target.id, "from_status": "waiting", "now": _stamp()}).rowcount == 1
         db.commit()
+    if not claimed:                                   # someone else got there first
+        return RedirectResponse(url="/queue_management", status_code=303)
+    request.session["announce"] = target.ticket_number      # played once (see #7)
+    log_action("Queue", "Ticket Called", f"Called {target.ticket_number}", request)
+    notify_display_update()
+    return RedirectResponse(url="/queue_management", status_code=303)
+
+
+def finish_ticket(ticket_id: int, final_status: str, allowed_statuses: tuple):
+    """Atomically archive an eligible ticket exactly once."""
+    
+    db = SessionLocal()
+
+    try:
+        # Serialize this database write sequence.
+        db.execute(text("BEGIN IMMEDIATE"))
         
+        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+        if ticket is None or ticket.status not in allowed_statuses:
+            db.rollback()
+            return None
+
+        # Copy everything needed BEFORE deleting: the object is unusable once its row is gone
+        number = ticket.ticket_number
+        visit = Visit(
+            citizen_name=ticket.citizen_name,
+            lane=ticket.lane,
+            ticket_number=number,
+            final_status=final_status,
+            service_id=ticket.service_id,
+            created_at=ticket.created_at,
+            called_at=ticket.called_at,
+            completed_at=datetime.now(),
+        )
+
+        # Delete FIRST and check how many rows it removed. If two requests arrive together, only
+        # one of them really removes the row, and only that one saves a Visit.
+        removed = db.query(Ticket).filter(Ticket.id == ticket_id, Ticket.status.in_(allowed_statuses)).delete(synchronize_session=False)
+        if removed != 1:
+            db.rollback()
+            return None
+
+        db.add(visit)
+        db.commit()   # the delete and the new Visit are saved together, or not at all
+        return number
+    
+    except Exception:
+        db.rollback()
+        raise
+
     finally:
         db.close()
-    log_action("Queue", "Ticket Called", f"Called {number}", request)
-    return RedirectResponse(url=f"/queue_management?announce={number}",status_code=303)
-
-
-def archive_ticket(ticket_id : int, final_status : str):
-    """Shared helper: mark a ticket finished and create its permanent Visit record."""
-    with SessionLocal() as db:
-        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
-
-        if ticket:
-            ticket.status = final_status
-            ticket.completed_at = datetime.now()
-            
-            visit = Visit(
-                citizen_name = ticket.citizen_name,
-                lane = ticket.lane,
-                ticket_number = ticket.ticket_number,
-                final_status = final_status,
-                service_id = ticket.service_id,
-                created_at = ticket.created_at,
-                called_at = ticket.called_at,
-                completed_at = ticket.completed_at,
-            )
-            db.add(visit)
-            db.commit()
     
 def get_incoming_order(limit: int = 3):
     """Simulate the 2:1 priority:regular call order without actually calling anyone."""
     
+    start = datetime.combine(date.today(), time.min)
     with SessionLocal() as db:
-        waiting_priority = db.query(Ticket).filter(Ticket.status == "waiting", Ticket.lane == "P").order_by(Ticket.created_at).all()
-        waiting_regular = db.query(Ticket).filter(Ticket.status == "waiting", Ticket.lane == "R").order_by(Ticket.created_at).all()
-    
-    upcoming = []
-    streak = priority_streak # start from the CURRENT real streak, so the preview matches reality
-    p_index = 0
-    r_index = 0
-    
+        streak = current_priority_streak(db)
+        waiting = db.query(Ticket).filter(Ticket.status == "waiting", Ticket.created_at >= start) \
+                    .order_by(Ticket.created_at)
+        waiting_priority = waiting.filter(Ticket.lane == "P").all()
+        waiting_regular = waiting.filter(Ticket.lane == "R").all()
+
+    upcoming, p_index, r_index = [], 0, 0
     while len(upcoming) < limit and (p_index < len(waiting_priority) or r_index < len(waiting_regular)):
-        
         if streak < 2 and p_index < len(waiting_priority):
-            upcoming.append(waiting_priority[p_index])
-            p_index += 1
-            streak += 1
-            
+            upcoming.append(waiting_priority[p_index]); p_index += 1; streak += 1
         elif r_index < len(waiting_regular):
-            upcoming.append(waiting_regular[r_index])
-            r_index += 1
-            streak = 0
-        elif p_index < len(waiting_priority):
-            # regular ran out, fall back to priority
-            upcoming.append(waiting_priority[p_index])
-            p_index += 1
-            streak += 1
+            upcoming.append(waiting_regular[r_index]); r_index += 1; streak = 0
         else:
-            break
+            upcoming.append(waiting_priority[p_index]); p_index += 1; streak += 1
     return upcoming
-    
+
+def _stamp() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")   # same format SQLAlchemy stores
+
+# One statement: claim the ticket only if nobody is currently called. SQLite runs it atomically.
+_CLAIM = text("""UPDATE tickets SET status='called', called_at=:now
+                 WHERE id=:id AND status=:from_status
+                   AND NOT EXISTS (SELECT 1 FROM tickets WHERE status='called')""")
+
 
 @app.post("/skip/{ticket_id}", dependencies=[Depends(login_required)])
 def skip_ticket(request: Request, ticket_id: int):
-    number = None
+    
     with SessionLocal() as db:
-        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
-        if ticket:
-            ticket.status = "skipped"   # just a status change, NOT archived
-            number = ticket.ticket_number
-            db.commit()
+        changed = db.query(Ticket).filter(Ticket.id == ticket_id, Ticket.status == "called") \
+                    .update({"status": "skipped"}, synchronize_session=False)
+        number = db.query(Ticket.ticket_number).filter(Ticket.id == ticket_id).scalar() if changed == 1 else None
+        db.commit()
     if number:
         log_action("Queue", "Ticket Skipped", f"Skipped {number}", request)
+        notify_display_update()                      # from #6
     return RedirectResponse(url="/queue_management", status_code=303)
 
 
 @app.post("/recall/{ticket_id}", dependencies=[Depends(login_required)])
 def recall_ticket(request: Request, ticket_id: int):
-    db = SessionLocal()
-    number = None
-    try:
-        if db.query(Ticket).filter(Ticket.status == "called").first():
-            return RedirectResponse(url="/queue_management", status_code=303)
-        
-        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
-        if ticket and ticket.status == "skipped":
-            ticket.status = "called"
-            ticket.called_at = datetime.now()  
-            number = ticket.ticket_number
-            db.commit()
-            
-    finally:
-        db.close()
-        
-    if number is None:   # nothing was recalled (ticket missing or not skipped)
+    with SessionLocal() as db:
+        claimed = db.execute(_CLAIM, {"id": ticket_id, "from_status": "skipped", "now": _stamp()}).rowcount == 1
+        db.commit()
+        number = db.query(Ticket.ticket_number).filter(Ticket.id == ticket_id).scalar() if claimed else None
+    if number is None:
         return RedirectResponse(url="/queue_management", status_code=303)
-
+    request.session["announce"] = number
     log_action("Queue", "Ticket Recalled", f"Recalled skipped ticket {number}", request)
-    return RedirectResponse(url=f"/queue_management?announce={number}", status_code=303)
+    notify_display_update()
+    return RedirectResponse(url="/queue_management", status_code=303)
 
 @app.post("/complete/{ticket_id}", dependencies=[Depends(login_required)])
 def complete_ticket(request: Request, ticket_id: int):
-    archive_ticket(ticket_id, "completed")
-    number = None
-    
-    with SessionLocal() as db:
-        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
-        if ticket:
-            number = ticket.ticket_number
-            db.delete(ticket)
-            db.commit()
+    # Only the visitor at the counter can be completed
+    number = finish_ticket(ticket_id, "completed", ("called",))
     if number:
         log_action("Queue", "Ticket Completed", f"Marked {number} as completed", request)
+        notify_display_update()
     return RedirectResponse(url="/queue_management", status_code=303)
 
 
 @app.post("/no-show/{ticket_id}", dependencies=[Depends(login_required)])
 def no_show_ticket(request: Request, ticket_id: int):
-    archive_ticket(ticket_id, "no_show")   # reuses your existing archive helper - permanent
-    number = None
-        
-    with SessionLocal() as db:
-        ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
-        if ticket:
-            number = ticket.ticket_number
-            db.delete(ticket)
-            db.commit()
+    # The visitor at the counter, or one in the skipped list
+    number = finish_ticket(ticket_id, "no_show", ("called", "skipped"))
     if number:
         log_action("Queue", "Ticket No-Show", f"Marked {number} as no-show", request)
+        notify_display_update()
     return RedirectResponse(url="/queue_management", status_code=303)
 
 @app.post("/queue/clear", dependencies=[Depends(login_required)])
@@ -907,10 +1194,11 @@ def clear_queue(request: Request):
 
     Ticket numbers do NOT restart: they are counted from today's tickets AND visits.
     """
-    global priority_streak
     db = SessionLocal()
     counts = Counter()
     try:
+        db.execute(text("BEGIN IMMEDIATE"))
+        
         tickets = db.query(Ticket).filter(Ticket.status.in_(["waiting", "called", "skipped"])).all()
         now = datetime.now()
         for t in tickets:
@@ -927,10 +1215,10 @@ def clear_queue(request: Request):
 
     total = sum(counts.values())
     if total:
-        priority_streak = 0
         log_action("Queue", "Queue Cleared",
                    f"Cleared {total} unserved ticket(s) ({counts['waiting']} waiting, {counts['called']} called, "
                    f"{counts['skipped']} skipped); all saved as no-show", request)
+        notify_display_update()
     return RedirectResponse(url="/queue_management", status_code=303)
 
 @app.get("/attendance", dependencies=[Depends(login_required)])
@@ -943,7 +1231,7 @@ def show_attendance(
     q: str = "",
     page: int = 1,
 ):  
-    service_id_int = int(service_id) if service_id else None
+    service_id_int = parse_optional_int(service_id)
     db = SessionLocal()
     try:
         # Single day filter - defaults to today when `date` is empty.
@@ -1025,11 +1313,14 @@ def apply_visit_filters(query, d_from, d_to, lane, service_id, q):
         )
     return query
 
+def like_pattern(q: str) -> str:
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
 
 @app.get("/attendance/print", dependencies=[Depends(login_required)])
 def attendance_print(request: Request, date_from: str = "", date_to: str = "", lane: str = "", service_id: str = "", q: str = ""):
     
-    service_id_int = int(service_id) if service_id else None
+    service_id_int = parse_optional_int(service_id)
     
     db = SessionLocal()
     
@@ -1060,7 +1351,7 @@ def attendance_print(request: Request, date_from: str = "", date_to: str = "", l
         if q:
             parts.append(f'Search: "{q}"')
             
-        log_action("Database", "Attendance Printed", f"Opened the attendance print view ({', '.join(parts)})", request)
+        log_action_throttled(request, "Database", "Attendance Printed", f"Opened the attendance print view ({', '.join(parts)})")
         return templates.TemplateResponse(request,"print_attendance.html", {
             
             "stats": stats,
@@ -1075,16 +1366,17 @@ def attendance_print(request: Request, date_from: str = "", date_to: str = "", l
     finally:
         db.close()
         
+_CSV_DANGEROUS = ("=", "+", "-", "@", "\t", "\r")
 def csv_safe(value) -> str:
     """Stop Excel from running a cell that starts with = + - @ as a formula."""
     s = "" if value is None else str(value)
-    return "'" + s if s[:1] in ("=", "+", "-", "@") else s
+    return "'" + s if s.startswith(_CSV_DANGEROUS) else s
 
 
 @app.get("/attendance/export", dependencies=[Depends(login_required)])
 def attendance_export(request: Request, date_from: str = "", date_to: str = "", lane: str = "", service_id: str = "", q: str = ""):
     """Download the attendance table (same filters as the page) as a CSV file."""
-    service_id_int = int(service_id) if service_id else None
+    service_id_int = parse_optional_int(service_id)
     d_from, d_to = resolve_date_range(date_from, date_to)
 
     db = SessionLocal()
@@ -1118,8 +1410,18 @@ def attendance_export(request: Request, date_from: str = "", date_to: str = "", 
     
     
 # SERVICE
+def service_name_error(db, name: str, exclude_id: int | None = None) -> str | None:
+    if not name:
+        return "Service name is required."
+    q = db.query(Service).filter(func.lower(Service.service_name) == name.lower())
+    if exclude_id:
+        q = q.filter(Service.id != exclude_id)
+    return f'A service named "{name}" already exists.' if q.first() else None
+
 @app.get("/services", dependencies=[Depends(login_required)])
 def list_services(request: Request):
+    message = request.session.pop("flash", None)
+    
     with SessionLocal() as db:
         services = db.query(Service).all()
         today_start = datetime.combine(date.today(), datetime.min.time())
@@ -1128,24 +1430,36 @@ def list_services(request: Request):
         return templates.TemplateResponse(request, "services.html", {
             
             "services": services,
-            "total_today": total_today
+            "total_today": total_today,
+            "message": message
+            
         })
 
 @app.post("/services/add", dependencies=[Depends(login_required)])
 def add_services(request: Request, service_name: str = Form(...), service_status: StatusEnum = Form(alias="service_status")):
+    name = clean_text(service_name, 80)
     with SessionLocal() as db:
-        new_service = Service(service_name=service_name, service_status=service_status)
-        db.add(new_service)
+        error = service_name_error(db, name)
+        if error:
+            flash(request, False, error)
+            return RedirectResponse(url="/services", status_code=303)
+        db.add(Service(service_name=name, service_status=service_status.value))
         db.commit()
-    log_action("Service", "Service Added", f"Added service: {service_name} ({service_status.value})", request)
+    log_action("Service", "Service Added", f"Added service: {name} ({service_status.value})", request)
     return RedirectResponse(url="/services", status_code=303)
 
 @app.post("/services/edit/{service_id}", dependencies=[Depends(login_required)])
 def edit_service(request: Request, service_id: int, service_name: str = Form(...), service_status: StatusEnum = Form(alias="service_status")):
     changes = []
-    
+    name = clean_text(service_name, 80)
     with SessionLocal() as db:
         service = db.query(Service).filter(Service.id == service_id).first()
+        error = service_name_error(db, name, exclude_id=service_id)
+        
+        if error:
+            flash(request, False, error)
+            return RedirectResponse(url="/services", status_code=303)
+
         if service:
             if service.service_name != service_name:
                 changes.append(f'renamed from "{service.service_name}"')
@@ -1165,7 +1479,6 @@ def delete_service(request: Request, service_id: int):
     log_entry = None
     try:
         service = db.query(Service).filter(Service.id == service_id).first()
-
         if service:
             name = service.service_name
             has_history = (
@@ -1177,8 +1490,15 @@ def delete_service(request: Request, service_id: int):
                 service.service_status = "Inactive"
                 log_entry = ("Service Deactivated", f'Deleted service "{name}", but it has ticket history, so it was set to Inactive instead')
             else:
-                db.delete(service)
-                log_entry = ("Service Deleted", f'Deleted service: {name}')
+                try:
+                    db.delete(service)
+                    db.commit()
+                    log_entry = ("Service Deleted", f"Deleted service: {name}")
+                except IntegrityError:         # a ticket appeared a moment ago: keep the row
+                    db.rollback()
+                    db.get(Service, service_id).service_status = "Inactive"
+                    db.commit()
+                    log_entry = ("Service Deactivated", f'"{name}" gained ticket history, so it was set to Inactive')
             db.commit()
     finally:
         db.close()
@@ -1285,16 +1605,8 @@ def run_backup(request: Request, folder: str = Form("")):
         elif not target_dir.is_absolute() or not target_dir.is_dir():
             raise FileNotFoundError(f"folder not found (use a full path such as D:\\Backups): {target_dir}")
 
-        target = target_dir / f"barangay_system_{datetime.now():%Y%m%d_%H%M%S}.db"
-        source = sqlite3.connect(data_path("barangay_system.db"))
-        try:
-            dest = sqlite3.connect(str(target))
-            try:
-                source.backup(dest)
-            finally:
-                dest.close()
-        finally:
-            source.close()
+        target = create_backup_file(target_dir, "barangay_system_")   # temp file + integrity check
+    
     except Exception as e:
         flash(request, False, f"Backup failed: {e}")
         log_action("Database", "Backup Failed", f"Backup to {target_dir} failed: {e}", request)
@@ -1319,6 +1631,13 @@ def purge_old_records(request: Request, cutoff: str = Form(...)):
         flash(request, False, f"For safety, only records older than {PURGE_MIN_AGE_DAYS} days can be purged "
                               f"(latest allowed date: {latest_allowed.strftime('%b %d, %Y')}).")
     else:
+        try:
+            BACKUP_DIR_DEFAULT.mkdir(parents=True, exist_ok=True)
+            create_backup_file(BACKUP_DIR_DEFAULT, "prepurge_")
+        except Exception as e:
+            flash(request, False, f"Purge cancelled: a safety backup could not be made first ({e}).")
+            return RedirectResponse(url="/maintenance", status_code=303)
+        
         db = SessionLocal()
         try:
             deleted = db.query(Visit).filter(
@@ -1340,3 +1659,17 @@ def purge_old_records(request: Request, cutoff: str = Form(...)):
         else:
             flash(request, True, f"No attendance records exist from before {cutoff_date.strftime('%b %d, %Y')}. Nothing was deleted.")
     return RedirectResponse(url="/maintenance", status_code=303)
+
+# Public display page: ticket numbers only, never names
+@app.get("/display")
+def display_page(request: Request):
+    return templates.TemplateResponse(request, "display.html", {})
+
+@app.get("/display/data")
+def display_data():
+    start = datetime.combine(date.today(), time.min)
+    with SessionLocal() as db:
+        current = db.query(Ticket).filter(Ticket.status == "called", Ticket.created_at >= start) \
+                    .order_by(Ticket.called_at.desc()).first()
+        now_serving = current.ticket_number if current else None
+    return {"now_serving": now_serving, "upcoming": [t.ticket_number for t in get_incoming_order(limit=3)]}

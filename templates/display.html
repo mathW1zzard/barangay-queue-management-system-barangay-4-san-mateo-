@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Now Serving</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body {
+            font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+            text-align: center;
+            padding: 4vh 4vw;
+        }
+
+        #now {
+            font-size: 18vw;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        #next {
+            font-size: 4vw;
+        }
+    </style>
+</head>
+
+<body>
+    <p>Now serving</p>
+    <div id="now">--</div>
+    <p>Up next</p>
+    <div id="next"></div>
+    <script>
+        const nowEl = document.getElementById("now"), nextEl = document.getElementById("next");
+        async function refresh() {
+            try {
+                const d = await (await fetch("/display/data", { cache: "no-store" })).json();
+                nowEl.textContent = d.now_serving || "--";
+                nextEl.textContent = d.upcoming.join("   ") || "No one waiting";
+            } catch (e) { /* keep the last numbers on screen */ }
+        }
+        function connect() {
+            const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/display");
+            ws.onmessage = refresh;
+            ws.onclose = () => setTimeout(connect, 2000);       // reconnect automatically
+        }
+        refresh(); connect(); setInterval(refresh, 15000);    // polling is the safety net
+    </script>
+</body>
+
+</html>

@@ -1836,7 +1836,7 @@ tbody tr:hover .empty-row {
 }
 /* ----------------------------------------------------------FOOTER BOTTOM---------------------------------------------------*/
 .footer{
-    margin-top: auto;
+    margin-top: 30px;
     font-size: 13.5px;
 }
 .bottom{

@@ -9,7 +9,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 hiddenimports = (
     collect_submodules("uvicorn")
     + collect_submodules("websockets")
-    + ["multipart", "python_multipart"]
+    + ["multipart", "python_multipart", "win32print", "pywintypes"]
 )
 
 datas = [

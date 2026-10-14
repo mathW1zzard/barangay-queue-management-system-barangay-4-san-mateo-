@@ -4,7 +4,13 @@
 {% block page_title %}Client Registration{% endblock %}
 {% block description %}To register a new ticket for resident{% endblock %}
 {% block page_subtitle %}New visitor{% endblock %}
-
+{% block head %}
+<style>
+    .confirm-summary { margin: 12px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; }
+    .confirm-summary dt { color: #64748b; }
+    .confirm-summary dd { margin: 0; font-weight: 600; word-break: break-word; }
+</style>
+{% endblock %}
 {% block content %}
 {% set active_services = services|selectattr('service_status', 'equalto', 'Active')|list %}
 

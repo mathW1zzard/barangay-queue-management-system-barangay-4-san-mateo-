@@ -113,7 +113,7 @@ select {
     width: 44px;
     height: 44px;
     border-radius: 14px;
-    background: var(--orange);
+    background-color: white;
     display: grid;
     place-items: center;
     flex: none;
@@ -1039,7 +1039,7 @@ tbody tr:hover .empty-row {
 .serving-main {
     display: flex;
     align-items: center;
-    gap: 60px;
+    gap: 35px;
     flex-wrap: wrap;
 }
 
@@ -1604,7 +1604,7 @@ tbody tr:hover .empty-row {
 
 .auth-foot {
     margin-top: 22px;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
 }
 
@@ -1833,4 +1833,12 @@ tbody tr:hover .empty-row {
 /* ------------------------------------------------------PURGE OLD ATTENDANCE------------------------------------------------*/
 .delete-description {
     margin-bottom: 10px;
+}
+/* ----------------------------------------------------------FOOTER BOTTOM---------------------------------------------------*/
+.footer{
+    margin-top: auto;
+    font-size: 13.5px;
+}
+.bottom{
+    margin-top: 200%;
 }

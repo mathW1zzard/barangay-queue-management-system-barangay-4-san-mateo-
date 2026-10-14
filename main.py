@@ -15,7 +15,11 @@ from enum import Enum
 import threading
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from fastapi import WebSocket, WebSocketDisconnect
-from escpos.printer import Dummy, Win32Raw
+from escpos.printer import Dummy
+import json
+import sys
+import textwrap
+import unicodedata
 from collections import Counter
 from sqlalchemy import desc, func, text
 from pathlib import Path
@@ -487,54 +491,203 @@ def build_announcement_clips(ticket_number: str):
 # True  = the slip prints by itself when a ticket is registered (the confirmation page then
 #         offers "Print again").
 # False = nothing prints until "Print ticket slip" is pressed on the confirmation page.
+
+
+# PRINTER
 AUTO_PRINT_ON_REGISTER = True
+PRINTER_SETTINGS_FILE = Path(data_path("printer_settings.json"))
+PAPER_COLUMNS = {"58": 32, "80": 48}           # characters per line on 58 mm and 80 mm paper
+VIRTUAL_PRINTER_WORDS = ("pdf", "xps", "onenote", "fax", "document writer")
+CHECK_PRINTER_STATUS = True                    # set False if Windows wrongly reports your printer as offline
+HAS_CUTTER = False            # tear-off printer; set True only if yours has a blade
+FEED_LINES = 4                # blank lines fed after the slip so it clears the tear bar
+CANCEL_CHINESE_MODE = True    # some Xprinter units start in Chinese (GBK) mode, which can garble Ñ and é
 
-def get_printer():
-    """The one place that decides which printer is used.
+# On a non-Windows computer (or with BQS_DUMMY_PRINTER=1) slips are written to a file instead of printed.
+USE_DUMMY_PRINTER = sys.platform != "win32" or bool(os.environ.get("BQS_DUMMY_PRINTER"))
 
-    Dummy() prints nothing; it only keeps the ESC/POS bytes (see last_ticket_printed.txt).
-    For the real USB thermal printer, replace the line below with, for example:
-        from escpos.printer import Usb
-        return Usb(0x04b8, 0x0e15)   # your printer's vendor ID and product ID
-    """
-    return Dummy()
+# Windows printer status bits (winspool.h) and what to tell the clerk
+_STATUS_PROBLEMS = {
+    0x1: "is paused", 0x2: "reports an error", 0x8: "has a paper jam", 0x10: "is out of paper",
+    0x40: "has a paper problem", 0x80: "is offline", 0x1000: "is not available",
+    0x400000: "has its cover open",
+}
+_ATTRIBUTE_WORK_OFFLINE = 0x400
+
+
+class PrinterError(Exception):
+    """A printing problem, worded so a clerk can understand it."""
+
+
+def load_printer_settings() -> dict:
+    try:
+        data = json.loads(PRINTER_SETTINGS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    paper = str(data.get("paper_mm", "58"))
+    return {"printer_name": str(data.get("printer_name", "")).strip(),
+            "paper_mm": paper if paper in PAPER_COLUMNS else "58"}
+
+
+def save_printer_settings(printer_name: str, paper_mm: str) -> None:
+    tmp = PRINTER_SETTINGS_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"printer_name": printer_name, "paper_mm": paper_mm}), encoding="utf-8")
+    os.replace(tmp, PRINTER_SETTINGS_FILE)       # atomic, like the session key
+
+
+def list_windows_printers() -> list[str]:
+    """Printers installed in Windows, without the virtual ones (PDF, XPS, Fax...)."""
+    if sys.platform != "win32":
+        return []
+    try:
+        import win32print
+        found = win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS)
+        names = [p[2] for p in found]            # each entry: (flags, description, name, comment)
+    except Exception:
+        log.exception("Could not list the Windows printers")
+        return []
+    return sorted(n for n in names if not any(w in n.lower() for w in VIRTUAL_PRINTER_WORDS))
+
+
+def send_to_windows_printer(printer_name: str, data: bytes) -> None:
+    """Hand raw ESC/POS bytes to the Windows print spooler. Raises PrinterError with a plain message."""
+    import win32print
+    try:
+        handle = win32print.OpenPrinter(printer_name)
+    except Exception as e:
+        raise PrinterError(f'Windows cannot open the printer "{printer_name}". '
+                           f"Is it installed and switched on? ({e})") from e
+    try:
+        if CHECK_PRINTER_STATUS:
+            info = win32print.GetPrinter(handle, 2)
+            problems = [msg for bit, msg in _STATUS_PROBLEMS.items() if info.get("Status", 0) & bit]
+            if info.get("Attributes", 0) & _ATTRIBUTE_WORK_OFFLINE:
+                problems.append('is set to "Use Printer Offline"')
+            if problems:
+                # A job sent now would sit in the queue and print later, maybe twice if the clerk retries.
+                raise PrinterError(f'The printer "{printer_name}" ' + " and ".join(problems) + ".")
+        win32print.StartDocPrinter(handle, 1, ("Queue slip", None, "RAW"))
+        try:
+            win32print.StartPagePrinter(handle)
+            win32print.WritePrinter(handle, data)
+            win32print.EndPagePrinter(handle)
+        finally:
+            win32print.EndDocPrinter(handle)
+    finally:
+        win32print.ClosePrinter(handle)
+
+
+def deliver_to_printer(data: bytes, settings: dict) -> None:
+    if USE_DUMMY_PRINTER:
+        with open(data_path("last_ticket_printed.txt"), "wb") as f:      # contains client names: test mode only
+            f.write(data)
+        log.info("Dummy printer: slip saved to last_ticket_printed.txt")
+        return
+    if not settings["printer_name"]:
+        raise PrinterError("No printer is selected. Choose one under Maintenance > Receipt printer.")
+    send_to_windows_printer(settings["printer_name"], data)
+
+
+def slip_text(value: str) -> str:
+    """Keeps letters the printer's default code page (CP437: Ñ ñ é í ó ú...) can print.
+    Anything else is reduced to plain letters, so it never prints as garbage."""
+    def printable(ch: str) -> str:
+        try:
+            ch.encode("cp437")
+            return ch
+        except UnicodeEncodeError:
+            return unicodedata.normalize("NFKD", ch).encode("ascii", "ignore").decode()
+    return "".join(printable(c) for c in unicodedata.normalize("NFC", value or ""))
+
+SIZE_NORMAL = (1, 1)
+SIZE_HEADER = (1, 2)    # barangay name: taller, same width
+SIZE_TICKET = (5, 5)    # "P-008" = 25 columns; even "P-1000" = 30 still fits
+SIZE_LANE   = (2, 2)    # "PRIORITY LANE" = 26 columns
+SIZE_BODY   = (1, 2)    # client, service, date, footer: taller, same width, so names wrap no more than before
+
+def _style(p, align="left", bold=False, size=SIZE_NORMAL):
+    """Set alignment, bold and character size. Size stays until changed, so every block sets it."""
+    p.set(align=align, bold=bold)
+    w, h = size
+    p._raw(b"\x1d!" + bytes([((w - 1) << 4) | (h - 1)]))     # GS ! n: width in the high bits, height in the low
+    
+    
+def build_slip(ticket_number: str, citizen_name: str, service_name: str, lane: str,
+               created_at: datetime, columns: int) -> bytes:
+    p = Dummy()                                   # only builds the ESC/POS bytes; nothing is printed here
+    p._raw(b"\x1b@")                              # reset the printer to a known state
+    if CANCEL_CHINESE_MODE:
+        p._raw(b"\x1c\x2e")                       # FS . = cancel Chinese character mode
+    rule = "-" * columns + "\n"
+
+    def fill(value: str, size: tuple, label: str = "") -> str:
+        # Larger text means fewer characters per line, so wrap at columns / width.
+        width = max(8, columns // size[0])
+        return textwrap.fill(label + slip_text(value), width=width, subsequent_indent=" " * len(label)) + "\n"
+
+    _style(p, "center", True, SIZE_HEADER)
+    p.text(fill(BARANGAY_NAME.upper(), SIZE_HEADER))
+    _style(p, "center", False, SIZE_NORMAL)
+    p.text("Official Queue Slip\n")
+    p.text(rule)
+
+    _style(p, "center", True, SIZE_TICKET)
+    p.text(f"{ticket_number}\n")
+    _style(p, "center", True, SIZE_LANE)
+    p.text(("PRIORITY LANE" if lane == "P" else "REGULAR LANE") + "\n")
+    _style(p, "center", False, SIZE_NORMAL)
+    p.text(rule)
+
+    _style(p, "left", False, SIZE_BODY)
+    p.text(fill(citizen_name, SIZE_BODY, "Client : "))
+    p.text(fill(service_name, SIZE_BODY, "Service: "))
+    p.text(fill(created_at.strftime("%b %d, %Y %I:%M %p"), SIZE_BODY, "Date   : "))
+    _style(p, "center", False, SIZE_NORMAL)
+    p.text(rule)
+
+    _style(p, "center", False, SIZE_BODY)
+    p.text("Please wait for your number\nto be called. Thank you!\n")
+
+    _style(p, "center", False, SIZE_NORMAL)        # back to 1x so the feed below is a normal length
+    p.text("\n" * FEED_LINES)
+    if HAS_CUTTER:
+        p.cut()
+    return p.output
+
+
+def build_test_slip(columns: int) -> bytes:
+    p = Dummy()
+    p._raw(b"\x1b@")
+    
+    if CANCEL_CHINESE_MODE:
+        p._raw(b"\x1c\x2e")                       # FS . = cancel Chinese character mode
+    
+    p.set(align="center", bold=True, width=2, height=2)
+    p.text("TEST\n")
+    p.set(align="center", bold=False, width=1, height=1)
+    p.text("The printer is working\n")
+    p.text("-" * columns + "\n")
+    p.set(align="left", bold=False, width=1, height=1)
+    p.text(("1234567890" * 6)[:columns] + "\n")  # must fit on ONE row; if it wraps, the paper width setting is too big
+    p.text(slip_text("Accents: \u00d1 \u00f1 \u00e9 \u00ed \u00f3 \u00fa") + "\n")
+    p.text(f"Paper setting: {columns} characters per line\n")
+    
+    p.text("\n" * FEED_LINES)
+    if HAS_CUTTER:
+        p.cut()
+    p.cut()
+    return p.output
+
 
 def print_ticket(ticket_number: str, citizen_name: str, service_name: str, lane: str, created_at: datetime) -> bool:
-    """Send the queue slip to the printer. Returns True if it was sent, False if it failed.
-
-    The lines match the slip on the confirmation page, so what is printed is what was confirmed.
-    """
+    """Send the queue slip to the printer. Returns True if it was handed over, False if it failed."""
     try:
-        printer = get_printer()
-        rule = "-" * 32 + "\n"
-
-        printer.set(align="center", bold=True, width=1, height=1)
-        printer.text(f"{BARANGAY_NAME.upper()}\n")
-        printer.set(align="center", bold=False, width=1, height=1)
-        printer.text("Official Queue Slip\n")
-        printer.text(rule)
-
-        printer.set(align="center", bold=True, width=2, height=2)
-        printer.text(f"{ticket_number}\n")
-        printer.set(align="center", bold=True, width=1, height=1)
-        printer.text(("PRIORITY LANE" if lane == "P" else "REGULAR LANE") + "\n")
-        printer.text(rule)
-
-        printer.set(align="left", bold=False, width=1, height=1)
-        printer.text(f"Client : {citizen_name}\n")
-        printer.text(f"Service: {service_name}\n")
-        printer.text(f"Date   : {created_at.strftime('%b %d, %Y %I:%M %p')}\n")
-        printer.text(rule)
-
-        printer.set(align="center", bold=False, width=1, height=1)
-        printer.text("Please wait for your number\nto be called. Thank you!\n\n")
-        printer.cut()
-
-        # Dummy doesn't print; save what WOULD be printed so it can be inspected.
-        if isinstance(printer, Dummy):
-            with open(data_path("last_ticket_printed.txt"), "wb") as f:
-                f.write(printer.output)
-            log.info("Ticket sent to (dummy) printer - check last_ticket_printed.txt")
+        settings = load_printer_settings()
+        data = build_slip(ticket_number, citizen_name, service_name, lane, created_at,
+                          PAPER_COLUMNS[settings["paper_mm"]])
+        deliver_to_printer(data, settings)
         return True
     except Exception as e:
         log.exception("Ticket printing failed for %s", ticket_number)
@@ -798,7 +951,7 @@ def validate_new_password(new: str, confirm: str) -> str | None:
 def password_fingerprint(password_hash: str) -> str:
     return password_hash[-16:]               # changes whenever the password changes
 
-# Throttle: 5 failures per 5 minutes per action
+# Throttle: 5 failures per 60 secs per action
 THROTTLE_MAX_FAILURES, THROTTLE_WINDOW_SECONDS = 5, 60
 _failures: dict[str, list[float]] = {}
 _failures_lock = threading.Lock()
@@ -1186,11 +1339,6 @@ def get_incoming_order(limit: int = 3):
 
 def _stamp() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")   # same format SQLAlchemy stores
-
-# One statement: claim the ticket only if nobody is currently called. SQLite runs it atomically.
-_CLAIM = text("""UPDATE tickets SET status='called', called_at=:now
-                 WHERE id=:id AND status=:from_status
-                   AND NOT EXISTS (SELECT 1 FROM tickets WHERE status='called')""")
 
 
 @app.post("/skip/{ticket_id}", dependencies=[Depends(login_required)])
@@ -1646,6 +1794,9 @@ def show_maintenance(request: Request):
         "default_backup_dir": str(BACKUP_DIR_DEFAULT),
         "purge_min_days": PURGE_MIN_AGE_DAYS,
         "latest_cutoff": (date.today() - timedelta(days=PURGE_MIN_AGE_DAYS)).isoformat(),
+        "printers": list_windows_printers(),
+        "printer": load_printer_settings(),
+        "dummy_printer": USE_DUMMY_PRINTER,
     })
 
 
@@ -1673,6 +1824,38 @@ def run_backup(request: Request, folder: str = Form("")):
         log_action("Database", "Backup", f"Database backup saved to {target}", request)
     return RedirectResponse(url="/maintenance", status_code=303)
 
+@app.post("/maintenance/printer/save", dependencies=[Depends(login_required)])
+def save_printer(request: Request, printer_name: str = Form(""), paper_mm: str = Form("58")):
+    name = clean_text(printer_name, 200)
+    if paper_mm not in PAPER_COLUMNS:
+        flash(request, False, "Choose 58 mm or 80 mm paper.")
+    elif name and not USE_DUMMY_PRINTER and name not in list_windows_printers():
+        flash(request, False, "That printer is not installed on this computer.")
+    else:
+        try:
+            save_printer_settings(name, paper_mm)
+        except OSError as e:
+            log.exception("Saving printer settings failed")
+            flash(request, False, f"Could not save the printer settings: {e}")
+        else:
+            flash(request, True, f'Receipt printer saved: {name or "none"} ({paper_mm} mm paper).')
+            log_action("Settings", "Printer Changed", f'Receipt printer set to "{name or "none"}" ({paper_mm} mm paper)', request)
+    return RedirectResponse(url="/maintenance", status_code=303)
+
+
+@app.post("/maintenance/printer/test", dependencies=[Depends(login_required)])
+def test_printer(request: Request):
+    settings = load_printer_settings()
+    try:
+        deliver_to_printer(build_test_slip(PAPER_COLUMNS[settings["paper_mm"]]), settings)
+    except Exception as e:
+        log.exception("Test print failed")
+        flash(request, False, f"Test print failed: {e}")
+        log_action("Settings", "Print Error", f"Test print failed: {e}", request)
+    else:
+        flash(request, True, "Test slip sent to the printer. Check that it came out correctly.")
+        log_action("Settings", "Test Print", "Printed a test slip", request)
+    return RedirectResponse(url="/maintenance", status_code=303)
 
 @app.post("/maintenance/purge", dependencies=[Depends(login_required)])
 def purge_old_records(request: Request, cutoff: str = Form(...)):

@@ -25,6 +25,41 @@
 </section>
 
 <section class="card">
+    <h2 class="card-title">Receipt printer</h2>
+    {% if dummy_printer %}
+    <div class="alert alert-error" role="alert">Test mode: slips are saved to a file and nothing is printed.</div>
+    {% endif %}
+    {% if printer.printer_name and printer.printer_name not in printers and not dummy_printer %}
+    <div class="alert alert-error" role="alert">The saved printer "{{ printer.printer_name }}" is not installed on this computer. Choose it again below.</div>
+    {% endif %}
+    <p class="hint">Pick the thermal printer exactly as Windows lists it, and the width of the paper roll (58 mm is the small
+        roll, 80 mm the wide one). Then press <strong>Print test slip</strong>.</p>
+    <form action="/maintenance/printer/save" method="post" class="filters">
+        <div class="field field-grow">
+            <label for="printer_name">Printer</label>
+            <select name="printer_name" id="printer_name">
+                <option value="">-- none selected --</option>
+                {% for name in printers %}
+                <option value="{{ name }}" {{ 'selected' if name == printer.printer_name }}>{{ name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label for="paper_mm">Paper width</label>
+            <select name="paper_mm" id="paper_mm">
+                <option value="58" {{ 'selected' if printer.paper_mm == '58' }}>58 mm</option>
+                <option value="80" {{ 'selected' if printer.paper_mm == '80' }}>80 mm</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">{{ icon('check', 18) }} Save printer</button>
+    </form>
+    <form action="/maintenance/printer/test" method="post" class="filters">
+        <button type="submit" class="btn btn-outline" {% if not printer.printer_name and not dummy_printer %}disabled{% endif %}>
+            {{ icon('printer', 18) }} Print test slip</button>
+    </form>
+</section>
+
+<section class="card">
     <h2 class="card-title">Purge old attendance records</h2>
     <p class="hint delete-description">Permanently deletes attendance history from before a date you choose, to free up space on this
         computer. Back up first. For safety, records from the last {{ purge_min_days }} days cannot be purged. The

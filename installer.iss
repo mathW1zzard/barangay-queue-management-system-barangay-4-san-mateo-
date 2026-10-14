@@ -5,7 +5,7 @@
 
 #define MyAppName "Barangay Queue & Service Management"
 #define MyAppVersion "1.0.0"
-#define MyAppPublisher "YOUR NAME HERE"
+#define MyAppPublisher "DIONISIO_MARTIN_MANZANILLO"
 #define MyAppExeName "BarangayQueueManagement.exe"
 #define MyBuildDir "dist\BarangayQueueManagement"
 

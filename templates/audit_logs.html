@@ -52,7 +52,7 @@
             <tbody>
                 {% for log in logs %}
                 <tr>
-                    <td>{{ log.created_at.strftime('%m/%d/%Y %I:%M:%S %p') if log.created_at else '--' }}</td>
+                    <td><strong>{{ log.created_at.strftime('%m/%d/%Y %I:%M:%S %p') if log.created_at else '--' }}</strong></td>
                     <td class="cell-primary">{{ log.admin_username }}</td>
                     <td><span class="tag tag-regular">{{ log.category }}</span></td>
                     <td class="cell-primary">{{ log.action }}</td>

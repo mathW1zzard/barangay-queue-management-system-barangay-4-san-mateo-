@@ -1,3 +1,4 @@
+import ctypes
 import socket
 import sys
 import threading
@@ -8,7 +9,6 @@ import webview
 
 from app_logging import setup_logging, log
 setup_logging()   # first, so even an error while importing main is recorded
-import main       # imported directly (not "main:app") so PyInstaller bundles it
 
 from paths import resource_path
 
@@ -37,6 +37,27 @@ def wait_until_started(server, thread, timeout: float = STARTUP_TIMEOUT) -> bool
         time.sleep(0.1)
     return False
 
+_ERROR_ALREADY_EXISTS = 183
+_instance_handle = None          # keep the handle alive for the life of the process
+
+def acquire_single_instance() -> bool:
+    """Windows named mutex: True if we are the first copy running in this Windows session."""
+    global _instance_handle
+    if sys.platform != "win32":
+        return True
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateMutexW.restype = ctypes.c_void_p
+    k32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
+    _instance_handle = k32.CreateMutexW(None, False, "Local\\BarangayQueueManagement_SingleInstance")
+    return ctypes.get_last_error() != _ERROR_ALREADY_EXISTS
+
+if not acquire_single_instance():
+    log.warning("A second copy was started and closed itself")
+    ctypes.windll.user32.MessageBoxW(None, "The Barangay Queue system is already running.",
+                                     "Barangay Queue", 0x40)
+    sys.exit(0)
+
+import main 
 
 if __name__ == "__main__":
     main.log_app_start()

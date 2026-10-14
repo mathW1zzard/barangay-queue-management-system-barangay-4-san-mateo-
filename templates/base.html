@@ -52,7 +52,7 @@
                 </div>
                 <div class="topbar-right">
                     <span class="queue-pill">Active Queue: <strong>{{ active_queue_today() }}</strong></span>
-                    
+
                     <div class="user-menu">
 
                         <button type="button" class="avatar" id="user-menu-btn" aria-haspopup="menu"
@@ -71,7 +71,12 @@
 
                 </div>
             </header>
-
+            {% if rollover_failed() %}
+            <div class="alert alert-error" role="alert">
+                Old tickets from a previous day could not be archived. The system will retry automatically every few
+                minutes. If this message stays, contact the administrator.
+            </div>
+            {% endif %}
             <main class="content">
                 {% block content %}{% endblock %}
             </main>

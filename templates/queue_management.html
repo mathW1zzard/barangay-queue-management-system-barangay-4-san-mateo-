@@ -4,6 +4,9 @@
 {% block page_title %}Queue Management{% endblock %}
 {% block page_subtitle %}Live counter{% endblock %}
 {% block description %}To display the tickets queue{% endblock %}
+{% if message %}
+<div class="alert {{ 'alert-success' if message.ok else 'alert-error' }}" role="{{ 'status' if message.ok else 'alert' }}">{{ message.text }}</div>
+{% endif %}
 {% block content %}
 <!--LIVE PANEL-->
 <section class="live-panel">
@@ -45,7 +48,7 @@
             <p class="idle-message">{% if upcomming %}Nobody is at the counter. Call the next visitor when you are
                 ready.{% else %}Nobody is at the counter and nobody is waiting.{% endif %}</p>
             {% if upcomming %}
-            <button type="button" class="btn btn-primary btn-xl" data-confirm data-action="/call-next"
+            <button type="button" class="btn btn-primary btn-xl" data-confirm data-action="/call-next/{{ upcomming[0].id }}"
                 data-title="Call the next visitor?"
                 data-message="{{ upcomming[0].ticket_number }} ({{ upcomming[0].citizen_name }}) will be called to the counter and the announcement will play."
                 data-label="Call {{ upcomming[0].ticket_number }}">{{ icon('bell', 22) }} Call next</button>

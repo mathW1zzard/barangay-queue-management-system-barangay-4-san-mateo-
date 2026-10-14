@@ -14,7 +14,7 @@
         <p class="hint">Fill in the client's details and choose Priority or Regular lane.</p>
 
         {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
-        <form action="/register" method="post" class="form">
+        <form action="/register" method="post" class="form" id="register-form" data-needs-confirm>
             <div class="field">
                 <label for="citizen_name">Client full name</label>
                 <input type="text" name="citizen_name" id="citizen_name" value="{{ form.citizen_name if form else '' }}"
@@ -25,10 +25,9 @@
                 <label for="service_id">Requested service</label>
                 <select name="service_id" id="service_id" required {% if not active_services %}disabled{% endif %}>
                     {% for service in active_services %}
-                    {{ 'selected' if form and form.service_id == service.id|string }}
-                    <option value="{{ service.id }}">{{ service.service_name }}</option>
+                    <option value="{{ service.id }}" {{ 'selected' if form and form.service_id==service.id|string }}>{{
+                        service.service_name }}</option>
                     {% else %}
-                    {{ 'selected' if form and form.service_id == service.id|string }}
                     <option value="">No active services. Add one on the Services page.</option>
                     {% endfor %}
                 </select>
@@ -38,8 +37,7 @@
                 <legend>Client classification</legend>
                 <div class="lane-grid">
                     <label class="lane-card">
-                        {{ 'checked' if form and form.lane == 'P' }}
-                        <input type="radio" name="lane" value="P">
+                        <input type="radio" name="lane" value="P" {{ 'checked' if form and form.lane == 'P' }}>
                         <span class="lane-card-text">
                             <span class="lane-card-title">Priority</span>
                             <span class="lane-card-desc">Senior citizens, persons with disabilities, pregnant
@@ -48,8 +46,7 @@
                         <span class="lane-dot" aria-hidden="true"></span>
                     </label>
                     <label class="lane-card">
-                        {{ 'checked' if form and form.lane == 'R' }}
-                        <input type="radio" name="lane" value="R" checked>
+                        <input type="radio" name="lane" value="R" checked {{ 'checked' if form and form.lane == 'P' }}>
                         <span class="lane-card-text">
                             <span class="lane-card-title">Regular</span>
                             <span class="lane-card-desc">All other walk-in visitors</span>
@@ -120,7 +117,7 @@
                             {% if ticket.status == 'waiting' %}
                             <button type="button" class="btn btn-sm btn-danger-outline" data-confirm
                                 data-action="/tickets/delete/{{ ticket.id }}" data-title="Delete this ticket?"
-                                data-message="{{ ticket.ticket_number }} ({{ ticket.citizen_name }}) will be removed from the queue. This visitor is being served right now, so the counter will become free.{% endif %} Deleted tickets are not saved to attendance history and cannot be restored."
+                                data-message="{{ ticket.ticket_number }} ({{ ticket.citizen_name }}) will be removed from the queue. Deleted tickets are not saved to attendance history and cannot be restored."
                                 data-label="Delete ticket" data-variant="danger">{{ icon('trash', 16) }} Delete</button>
                             {% endif %}
                         </div>
@@ -135,4 +132,62 @@
         </table>
     </div>
 </section>
+{% endblock %}
+{% block dialogs %}
+<dialog class="modal" id="register-confirm-dialog">
+    <div class="modal-body">
+        <h2>Generate this ticket?</h2>
+        <p class="modal-text">
+            {% if auto_print %}
+            The queue slip will print right away. Make sure the printer is on and has paper.
+            {% else %}
+            The ticket will be saved. You can print the slip on the next screen.
+            {% endif %}
+        </p>
+        <dl class="confirm-summary">
+            <dt>Client</dt><dd id="rc-name"></dd>
+            <dt>Service</dt><dd id="rc-service"></dd>
+            <dt>Lane</dt><dd id="rc-lane"></dd>
+        </dl>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-outline" data-close>Go back</button>
+            <button type="button" class="btn btn-primary" id="register-confirm-btn" autofocus>
+                {% if auto_print %}Generate &amp; print{% else %}Generate ticket{% endif %}
+            </button>
+        </div>
+    </div>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    (() => {
+        const form = document.getElementById('register-form');
+        const dialog = document.getElementById('register-confirm-dialog');
+        const confirmBtn = document.getElementById('register-confirm-btn');
+        if (!form || !dialog || !confirmBtn) return;
+
+        // Every submit (button click or Enter key) lands here after the browser's own
+        // "required" checks pass. We stop it, show the summary, and wait for confirmation.
+        form.addEventListener('submit', (e) => {
+            if (form.dataset.confirmed) return;          // the confirmed re-submit: let it through
+            e.preventDefault();
+
+            const service = form.elements['service_id'];
+            const lane = form.querySelector('input[name="lane"]:checked');
+            // textContent, never innerHTML: the name is user input
+            document.getElementById('rc-name').textContent = form.elements['citizen_name'].value.trim().replace(/\s+/g, ' ');
+            document.getElementById('rc-service').textContent = service.selectedIndex >= 0 ? service.options[service.selectedIndex].text : '';
+            document.getElementById('rc-lane').textContent = lane && lane.value === 'P' ? 'Priority' : 'Regular';
+            dialog.showModal();
+        });
+
+        confirmBtn.addEventListener('click', () => {
+            dialog.close();
+            form.dataset.confirmed = '1';
+            form.requestSubmit();                         // fires 'submit' synchronously
+            delete form.dataset.confirmed;                // so a Back-button return asks again
+        });
+    })();
+</script>
 {% endblock %}

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi import Request 
@@ -13,6 +13,7 @@ from datetime import datetime, date, time, timedelta
 from starlette.middleware.sessions import SessionMiddleware
 from enum import Enum
 import threading
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from fastapi import WebSocket, WebSocketDisconnect
 from escpos.printer import Dummy, Win32Raw
 from collections import Counter
@@ -64,9 +65,12 @@ def load_secret_key() -> str:
 
 app.add_middleware(SessionMiddleware,
     secret_key=load_secret_key(),
+    session_cookie="bqs_session", 
     same_site="lax",
     max_age=8 * 60 * 60,
 )
+
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
 
 @app.middleware("http")
 async def block_cross_origin_posts(request: Request, call_next):
@@ -88,6 +92,7 @@ def render_registration(request: Request, error: str | None = None, form: dict |
         return templates.TemplateResponse(request, "client_registration.html", {
             "tickets": tickets, "services": services, "total_today": len(tickets),
             "queue_info": queue_snapshot(), "error": error, "form": form,
+            "auto_print": AUTO_PRINT_ON_REGISTER,
         }, status_code=status_code)
 
 
@@ -104,6 +109,8 @@ def current_priority_streak(db) -> int:
         streak += 1
     return streak
 
+THROTTLE_MAX_FAILURES, THROTTLE_WINDOW_SECONDS = 5, 60
+
 # ADMIN LOGS
 LOG_CATEGORIES = ["Queue", "Service", "Settings", "Security", "Database"]
 NOT_SIGNED_IN = "(not signed in)" # who gets blamed for failed logins
@@ -111,9 +118,14 @@ NOT_SIGNED_IN = "(not signed in)" # who gets blamed for failed logins
 # SESSION TRACKING (so the audit log can record a session that ended by closing the app)
 active_admin_id = None
 SESSION_EVENTS = ("Login", "Logout", "Session Closed", "Session Interrupted")
+SESSION_SECRET = load_secret_key() 
 
 # DAILY ROLLOVER (tickets left over from a previous day)
 last_rollover_date = None            # the day the cleanup last ran in this session
+last_backup_attempt = None
+rollover_retry_at = 0.0
+rollover_failed = False
+ROLLOVER_RETRY_SECONDS = 300
 rollover_lock = threading.Lock()
 
 # MAINTENANCE
@@ -122,7 +134,7 @@ PURGE_MIN_AGE_DAYS = 30 # safety: records newer than this can never be purged
 
 # AUTOMATIC BACKUPS
 AUTO_BACKUP_KEEP_DAYS = 14   # keep the newest automatic backup of each of the last 14 days that have one
-AUTO_BACKUP_NAME = re.compile(r"^auto_(\d{8})_\d{6}\.db$")   # the ONLY file names cleanup may ever delete
+AUTO_BACKUP_NAME = re.compile(r"^auto_(\d{8})_\d{6}(?:_\d+)?\.db$")   # the ONLY file names cleanup may ever delete
 EXTRA_BACKUP_SETTING = Path(data_path("backup_folder.txt"))   # one line: full path of a second backup folder
 
 def flash(request: Request, ok: bool, text_: str):
@@ -210,7 +222,7 @@ def log_app_closed():
         if name:
             log_action("Security", "Session Closed", "Application was closed without signing out", username=name)
     except Exception as e:
-        print(f"Closed audit log failed: {e}")
+        log.exception("Closed audit log failed")
           
 def parse_date(value: str):
     try:
@@ -286,6 +298,13 @@ def create_backup_file(target_dir: Path, prefix: str) -> Path:
         raise
     return target
 
+def _today_start_str() -> str:
+    return datetime.combine(date.today(), time.min).strftime("%Y-%m-%d %H:%M:%S.%f")  # same format SQLAlchemy stores
+
+_CLAIM = text("""UPDATE tickets SET status='called', called_at=COALESCE(called_at, :now)
+                 WHERE id=:id AND status=:from_status
+                   AND NOT EXISTS (SELECT 1 FROM tickets
+                                   WHERE status='called' AND created_at >= :today_start)""")
 
 def get_extra_backup_dir():
     """The optional second backup folder (an external drive, say), or None."""
@@ -364,21 +383,28 @@ def ensure_daily_rollover():
     This also covers a computer that stays on past midnight. After the first run of the day it costs
     one date comparison.
     """
-    global last_rollover_date
+    global last_rollover_date, last_backup_attempt, rollover_retry_at, rollover_failed
     today = date.today()
-    if last_rollover_date == today:
+    if last_rollover_date == today or monotonic() < rollover_retry_at:
         return
     with rollover_lock:
-        if last_rollover_date == today:
+        if last_rollover_date == today or monotonic() < rollover_retry_at:
             return
-        auto_backup("Daily backup")        # snapshot first, before anything is archived
+        if last_backup_attempt != today:
+          last_backup_attempt = today
+          auto_backup("Daily Backup")  
         try:
             archive_stale_tickets()
         except Exception:
             log.exception("Daily rollover failed")
+            rollover_failed = True
+            rollover_retry_at = monotonic() + ROLLOVER_RETRY_SECONDS
             return
+        rollover_failed = False
         last_rollover_date = today
         
+templates.env.globals["rollover_failed"] = lambda: rollover_failed
+
 def active_queue_today():
     """Tickets registered today that are still in the queue."""
     db = SessionLocal()
@@ -546,7 +572,9 @@ def show_setup(request: Request):
 
     return templates.TemplateResponse(request, "setup1.html", {})
 
-
+def normalize_username(value: str) -> str:
+    return clean_text(value, 50)
+ 
 @app.post("/setup")
 def process_setup(request: Request, username: str = Form(...), password: str = Form(...), confirm_password: str = Form(...)):
     username = clean_text(username, 50)
@@ -597,6 +625,7 @@ def show_login(request: Request):
 @app.post("/login")
 def process_login(request: Request, username: str = Form(...), password: str = Form(...)):
     wait = throttle_wait("login")
+    username = normalize_username(username)
     if wait:
         return templates.TemplateResponse(request, "login.html",
             {"error": f"Too many failed attempts. Try again in {wait} seconds."}, status_code=429)
@@ -633,6 +662,7 @@ def process_forgot_password(
     confirm_password: str = Form(...),
 ):
     wait = throttle_wait("recovery")
+    username = normalize_username(username)
     if wait:
         return templates.TemplateResponse(request, "forgot_password.html",
             {"error": f"Too many attempts. Try again in {wait} seconds."}, status_code=429)
@@ -667,7 +697,8 @@ def process_forgot_password(
 @app.post("/logout")
 def logout(request: Request):
     global active_admin_id
-    log_action("Security", "Logout", "Signed out", request)   # before the session is cleared
+    if request.session.get("admin_id"):
+        log_action("Security", "Logout", "Signed out", request)   # before the session is cleared
     active_admin_id = None
     request.session.clear()
     return RedirectResponse(url="/login", status_code=303)
@@ -703,30 +734,35 @@ def show_change_password(request: Request):
 
 @app.post("/change-password", dependencies=[Depends(login_required)])
 def process_change_password(request: Request, current_password: str = Form(...), new_password: str = Form(...), confirm_password: str = Form(...)):
-    db = SessionLocal()
-    try:
-        admin = db.query(Admin).filter(Admin.id == request.session["admin_id"]).first()
+    wait = throttle_wait("change_password")
+    if wait:
+        return templates.TemplateResponse(request, "change_password.html",
+            {"error": f"Too many failed attempts. Try again in {wait} seconds."}, status_code=429)
+        
+    error = None
+    with SessionLocal() as db:
+        admin = db.get(Admin, request.session["admin_id"])
         if not admin:
             request.session.clear()
             return RedirectResponse(url="/login", status_code=303)
 
-        error = None
-        if not bcrypt.checkpw(current_password.encode(), admin.password_hash.encode()):
+        if not check_password(current_password, admin.password_hash):
             error = "Current password is incorrect"
-        elif new_password != confirm_password:
-            error = "New passwords do not match"
-        elif len(new_password) < 8:
-            error = "Password must be at least 8 characters"
+            record_failure("change_password")
+        else:
+            error = validate_new_password(new_password, confirm_password)
+
+        if not error:
+            new_hash = hash_password(new_password)
+            admin.password_hash = new_hash
+            db.commit()
+            request.session["pwv"] = password_fingerprint(admin.password_hash)   # keeps THIS window signed in
 
         if error:
             if error == "Current password is incorrect":
                 log_action("Security", "Password Change Failed", "Wrong current password entered", request)
             return templates.TemplateResponse(request, "change_password.html", {"error": error})
 
-        admin.password_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
-        db.commit()
-    finally:
-        db.close()
         
     log_action("Security", "Password Changed", "Changed their own password", request)
     return templates.TemplateResponse(request, "change_password.html", {"success": "Password updated."})
@@ -808,7 +844,7 @@ templates.env.globals["admin_initials"] = admin_initials
 @app.get("/dashboard", dependencies=[Depends(login_required)])
 def show_dashboard(request: Request):
     with SessionLocal() as db:
-        tickets = db.query(Ticket).all()
+        
         services = db.query(Service).all()
         
         today_start = datetime.combine(date.today(), datetime.min.time())
@@ -876,7 +912,6 @@ def show_dashboard(request: Request):
             "waiting_count": waiting_count,
             "completed_count": completed_count,
             "no_show_count": no_show_count,
-            "tickets": tickets,
             "services": services,
             "service_volume": service_volume    
         })
@@ -894,7 +929,7 @@ def queue_snapshot() -> dict:
     try:
         today_start = datetime.combine(date.today(), datetime.min.time())
         
-        current = db.query(Ticket).filter(Ticket.status == "called") \
+        current = db.query(Ticket).filter(Ticket.status == "called", Ticket.created_at >= today_start) \
             .order_by(Ticket.called_at.desc()).first()
             
         now_serving = current.ticket_number if current else None
@@ -934,7 +969,7 @@ def register_ticket(request: Request, citizen_name: str = Form(""), lane: str = 
         if service is None:
             return render_registration(request, "Selected service is unavailable.", form, 400)
         service_name = service.service_name
-        ticket_number = issue_ticket_number(db, lane)           # from #2
+        ticket_number = issue_ticket_number(db, lane)          
         created_at = datetime.now()
         ticket = Ticket(citizen_name=name, lane=lane, service_id=sid,
                         ticket_number=ticket_number, created_at=created_at)
@@ -943,6 +978,7 @@ def register_ticket(request: Request, citizen_name: str = Form(""), lane: str = 
         ticket_id = ticket.id
 
     url = f"/client_registration/confirmation/{ticket_id}"
+    notify_display_update()
     if AUTO_PRINT_ON_REGISTER:
         sent = print_ticket(ticket_number, name, service_name, lane, created_at)
         url += f"?printed={1 if sent else 0}"
@@ -1011,6 +1047,9 @@ def delete_ticket(request: Request, ticket_id: int):
 # QUEUE MANAGEMENT
 @app.get("/queue_management", dependencies=[Depends(login_required)])
 def show_queue(request: Request):
+    if "announce" in request.query_params:        # the announcement now comes from the session, never the URL
+        return RedirectResponse(url="/queue_management", status_code=303)
+    
     with SessionLocal() as db:
         tickets = db.query(Ticket).all()
         services = db.query(Service).all()
@@ -1019,7 +1058,7 @@ def show_queue(request: Request):
         
         today_start = datetime.combine(date.today(), datetime.min.time())
         
-        current_ticket = db.query(Ticket).filter(Ticket.status == "called") \
+        current_ticket = db.query(Ticket).filter(Ticket.status == "called", Ticket.created_at >= today_start) \
             .order_by(Ticket.called_at.desc()).first()
 
         all_active = db.query(Ticket).filter(Ticket.status.in_(active_statuses), Ticket.created_at >= today_start).count()
@@ -1032,6 +1071,7 @@ def show_queue(request: Request):
         announce = request.session.pop("announce", None)        # one-shot: gone after this page load
         announce_clips = build_announcement_clips(announce) if announce else []      
               
+        message = request.session.pop("flash", None)
         response =  templates.TemplateResponse(request, "queue_management.html", {
             
             "total_today": total_today,
@@ -1043,24 +1083,35 @@ def show_queue(request: Request):
             "skipped_count": skipped_count,
             "current_ticket": current_ticket,
             "upcomming": upcomming,
-            "announcement_clips": announce_clips
+            "announcement_clips": announce_clips,
+            "message": message
         })
         
         return response
 
 
 # LIVE PANEL
-@app.post("/call-next", dependencies=[Depends(login_required)])
-def call_next(request: Request):
+@app.post("/call-next/{ticket_id}", dependencies=[Depends(login_required)])
+def call_next(request: Request, ticket_id: int):
     upcoming = get_incoming_order(limit=1)
     if not upcoming:
+        flash(request, False, "Nobody is waiting.")
         return RedirectResponse(url="/queue_management", status_code=303)
+    
     target = upcoming[0]
-    with SessionLocal() as db:
-        claimed = db.execute(_CLAIM, {"id": target.id, "from_status": "waiting", "now": _stamp()}).rowcount == 1
-        db.commit()
-    if not claimed:                                   # someone else got there first
+    
+    if target.id != ticket_id:       # the queue changed since the page was drawn
+        flash(request, False, f"The queue changed. The next visitor is now {target.ticket_number}. "
+                              "Please check and press Call next again.")
         return RedirectResponse(url="/queue_management", status_code=303)
+    
+    with SessionLocal() as db:
+        claimed = db.execute(_CLAIM, {"id": target.id, "from_status": "waiting", "now": _stamp(), "today_start": _today_start_str()}).rowcount == 1
+        db.commit()
+    if not claimed:
+        flash(request, False, "Someone is already at the counter. Finish or skip that visitor first.")# someone else got there first
+        return RedirectResponse(url="/queue_management", status_code=303)
+    
     request.session["announce"] = target.ticket_number      # played once (see #7)
     log_action("Queue", "Ticket Called", f"Called {target.ticket_number}", request)
     notify_display_update()
@@ -1159,7 +1210,7 @@ def skip_ticket(request: Request, ticket_id: int):
 @app.post("/recall/{ticket_id}", dependencies=[Depends(login_required)])
 def recall_ticket(request: Request, ticket_id: int):
     with SessionLocal() as db:
-        claimed = db.execute(_CLAIM, {"id": ticket_id, "from_status": "skipped", "now": _stamp()}).rowcount == 1
+        claimed = db.execute(_CLAIM, {"id": ticket_id, "from_status": "skipped", "now": _stamp(), "today_start": _today_start_str()}).rowcount == 1
         db.commit()
         number = db.query(Ticket.ticket_number).filter(Ticket.id == ticket_id).scalar() if claimed else None
     if number is None:
@@ -1229,9 +1280,13 @@ def show_attendance(
     lane: str = "",
     service_id: str = "",
     q: str = "",
-    page: int = 1,
+    page: str = "1",
 ):  
     service_id_int = parse_optional_int(service_id)
+    
+    if service_id and parse_optional_int(service_id) is None:
+        return RedirectResponse(str(request.url.remove_query_params("service_id")), status_code=303)
+    
     db = SessionLocal()
     try:
         # Single day filter - defaults to today when `date` is empty.
@@ -1242,6 +1297,7 @@ def show_attendance(
         base = apply_visit_filters(db.query(Visit), d_from, d_to, lane, service_id_int, q)
 
         total_records = base.count()                                   # count BEFORE offset/limit
+        page = parse_optional_int(page) or 1
         total_pages = max(1, math.ceil(total_records / PAGE_SIZE))
         page = max(1, min(page, total_pages))                           # clamp a stale ?page= from the URL
 
@@ -1307,10 +1363,9 @@ def apply_visit_filters(query, d_from, d_to, lane, service_id, q):
     if service_id:
         query = query.filter(Visit.service_id == service_id)
     if q:
-        like = f"%{q}%"
-        query = query.filter(
-            Visit.ticket_number.ilike(like) | Visit.citizen_name.ilike(like)
-        )
+        like = like_pattern(q)
+        query = query.filter(Visit.ticket_number.ilike(like, escape="\\")
+                             | Visit.citizen_name.ilike(like, escape="\\"))
     return query
 
 def like_pattern(q: str) -> str:
@@ -1321,6 +1376,8 @@ def like_pattern(q: str) -> str:
 def attendance_print(request: Request, date_from: str = "", date_to: str = "", lane: str = "", service_id: str = "", q: str = ""):
     
     service_id_int = parse_optional_int(service_id)
+    if service_id and parse_optional_int(service_id) is None:
+        return RedirectResponse(str(request.url.remove_query_params("service_id")), status_code=303)
     
     db = SessionLocal()
     
@@ -1379,6 +1436,8 @@ def attendance_export(request: Request, date_from: str = "", date_to: str = "", 
     service_id_int = parse_optional_int(service_id)
     d_from, d_to = resolve_date_range(date_from, date_to)
 
+    if service_id and parse_optional_int(service_id) is None:
+        return RedirectResponse(str(request.url.remove_query_params("service_id")), status_code=303)
     db = SessionLocal()
     try:
         rows = apply_visit_filters(db.query(Visit), d_from, d_to, lane, service_id_int, q) \
@@ -1453,7 +1512,7 @@ def edit_service(request: Request, service_id: int, service_name: str = Form(...
     changes = []
     name = clean_text(service_name, 80)
     with SessionLocal() as db:
-        service = db.query(Service).filter(Service.id == service_id).first()
+        service = db.get(Service, service_id)
         error = service_name_error(db, name, exclude_id=service_id)
         
         if error:
@@ -1461,15 +1520,15 @@ def edit_service(request: Request, service_id: int, service_name: str = Form(...
             return RedirectResponse(url="/services", status_code=303)
 
         if service:
-            if service.service_name != service_name:
+            if service.service_name != name:
                 changes.append(f'renamed from "{service.service_name}"')
             if service.service_status != service_status.value:
                 changes.append(f"status {service.service_status} -> {service_status.value}")
-            service.service_name = service_name
-            service.service_status = service_status
+            service.service_name = name
+            service.service_status = service_status.value
             db.commit()
     if changes:   # saving the form without changing anything is not worth a log row
-        log_action("Service", "Service Modified", f'Modified service "{service_name}": ' + "; ".join(changes), request)
+        log_action("Service", "Service Modified", f'Modified service "{name}": ' + "; ".join(changes), request)
 
     return RedirectResponse(url="/services", status_code=303)
 
@@ -1514,7 +1573,7 @@ def show_audit_logs(
     date_to: str = "",
     category: str = "",
     q: str = "",
-    page: int = 1,
+    page: str = "1",
 ):
     # Same rule as Attendance: the date filter always has a value (today by default)
     d_from, d_to = resolve_date_range(date_from, date_to)
@@ -1529,14 +1588,13 @@ def show_audit_logs(
         if category:
             query = query.filter(AdminLog.category == category)
         if q:
-            like = f"%{q}%"
-            query = query.filter(
-                AdminLog.admin_username.ilike(like)
-                | AdminLog.action.ilike(like)
-                | AdminLog.description.ilike(like)
-            )
+            like = like_pattern(q)
+            query = query.filter(AdminLog.admin_username.ilike(like, escape="\\")
+                                 | AdminLog.action.ilike(like, escape="\\")
+                                 | AdminLog.description.ilike(like, escape="\\"))
 
         total_records = query.count()
+        page = parse_optional_int(page) or 1
         total_pages = max(1, math.ceil(total_records / PAGE_SIZE))
         page = max(1, min(page, total_pages))
 

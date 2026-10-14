@@ -137,6 +137,7 @@ select {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    flex-grow: 1;
 }
 
 .nav-link {
@@ -1840,5 +1841,5 @@ tbody tr:hover .empty-row {
     font-size: 13.5px;
 }
 .bottom{
-    margin-top: 200%;
+    margin-top: auto;
 }

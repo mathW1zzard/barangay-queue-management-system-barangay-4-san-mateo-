@@ -1,13 +1,13 @@
-; Inno Setup script for the Barangay Queue & Service Management System
+; Inno Setup script for the Barangay Queuing and Attendance Management System
 ; Put this file in the project root (next to build.bat), run build.bat first,
 ; then open this file in Inno Setup and press Compile (Ctrl+F9).
 ; Output: installer_output\BarangayQueueSetup.exe
 
-#define MyAppName "Barangay Queue & Service Management"
+#define MyAppName "Barangay Queuing and Attendance Management"
 #define MyAppVersion "1.0.0"
-#define MyAppPublisher "DIONISIO_MARTIN_MANZANILLO"
-#define MyAppExeName "BarangayQueueManagement.exe"
-#define MyBuildDir "dist\BarangayQueueManagement"
+#define MyAppPublisher "Soft-Tech Builders"
+#define MyAppExeName "Barangay_Queuing_Attendance_Management.exe"
+#define MyBuildDir "dist\Barangay_Queuing_Attendance_Management"
 
 [Setup]
 ; AppId identifies this app for upgrades/uninstall. Never change it after releasing.
@@ -15,7 +15,7 @@ AppId={{1D410D2B-9490-4626-930E-BDDDD9CCD023}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={autopf}\BarangayQueueManagement
+DefaultDirName={autopf}\Barangay_Queuing_Attendance_Management
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 ; Terms and conditions page: user must choose "I accept" to continue
@@ -23,7 +23,7 @@ LicenseFile=terms_and_conditions.txt
 SetupIconFile=app_icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 OutputDir=installer_output
-OutputBaseFilename=BarangayQueueSetup
+OutputBaseFilename=Barangay_Queuing_Attendance_Management_Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

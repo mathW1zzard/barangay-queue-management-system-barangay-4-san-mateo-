@@ -38,7 +38,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="BarangayQueueManagement",
+    name="Barangay_Queuing_Attendance_Management",
     icon="app_icon.ico",
     console=False,      # no black console window
     upx=False,          # UPX makes antivirus false alarms more likely
@@ -49,5 +49,5 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     upx=False,
-    name="BarangayQueueManagement",
+    name="Barangay_Queuing_Attendance_Management",
 )

@@ -53,8 +53,8 @@ def acquire_single_instance() -> bool:
 
 if not acquire_single_instance():
     log.warning("A second copy was started and closed itself")
-    ctypes.windll.user32.MessageBoxW(None, "The Barangay Queue system is already running.",
-                                     "Barangay Queue", 0x40)
+    ctypes.windll.user32.MessageBoxW(None, "The Barangay Queuing and Attendance Management System is already running.",
+                                     "Barangay Queuing and Attendance Management", 0x40)
     sys.exit(0)
 
 import main 
@@ -67,7 +67,7 @@ if __name__ == "__main__":
 
     if not wait_until_started(server, thread):
         log.error("The server did not start (see the errors above in app.log)")
-        webview.create_window("Barangay Queue & Service Management",
+        webview.create_window("Barangay Queuing and Attendance Management",
                               html="<h2 style='font-family:sans-serif'>The application could not start.</h2>"
                                    "<p style='font-family:sans-serif'>Please contact the system administrator. "
                                    "Details are in app.log.</p>", width=600, height=300)
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     if hasattr(webview, "settings"):
         webview.settings["ALLOW_DOWNLOADS"] = True
 
-    webview.create_window("Barangay Queue & Service Management", url, width=1200, height=800)
+    webview.create_window("Barangay Queuing and Attendance Management", url, width=1200, height=800)
     webview.start(icon=resource_path("app_icon.ico"))
 
     server.should_exit = True        # ask uvicorn to finish in-flight requests

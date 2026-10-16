@@ -13,7 +13,7 @@ import os
 import sys
 from pathlib import Path
 
-APP_NAME = "BarangayQueueManagement"
+APP_NAME = "Barangay_Queuing_Attendance_Management"
 
 # PyInstaller sets sys.frozen, and sys._MEIPASS = the folder holding the bundled files
 FROZEN = getattr(sys, "frozen", False)

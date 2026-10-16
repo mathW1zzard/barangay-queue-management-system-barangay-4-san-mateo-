@@ -48,7 +48,7 @@ def acquire_single_instance() -> bool:
     k32 = ctypes.WinDLL("kernel32", use_last_error=True)
     k32.CreateMutexW.restype = ctypes.c_void_p
     k32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
-    _instance_handle = k32.CreateMutexW(None, False, "Local\\BarangayQueueManagement_SingleInstance")
+    _instance_handle = k32.CreateMutexW(None, False, "Local\\Barangay_Queuing_Attendance_Management_SingleInstance")
     return ctypes.get_last_error() != _ERROR_ALREADY_EXISTS
 
 if not acquire_single_instance():

@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}About{% endblock %}
+{% block page_title %}About{% endblock %}
+{% block description %}About the Barangay Queuing and Attendance Management System{% endblock %}
+{% block page_subtitle %}About the system{% endblock %}
+
+{% block head %}
+<style>
+    /* ---- About page ---- */
+    .about-name {
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--text);
+        margin-bottom: 10px;
+    }
+
+    .about-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 14px;
+    }
+
+    .about-desc {
+        font-size: 17px;
+        line-height: 1.6;
+        color: var(--muted);
+        max-width: 70ch;
+        margin-top: 16px;
+    }
+
+    /* ---- Developer cards ---- */
+    .dev-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 24px;
+    }
+
+    .dev-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 8px;
+        padding: 36px 24px 24px;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        transition: transform .2s ease, box-shadow .2s ease;
+    }
+
+    .dev-card::before {
+        /* orange accent bar across the top */
+        content: "";
+        position: absolute;
+        inset: 0 0 auto 0;
+        height: 5px;
+    }
+
+    .dev-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 2px 4px rgba(15, 23, 42, .05), 0 14px 32px rgba(15, 23, 42, .10);
+    }
+
+    .dev-avatar {
+        width: 88px;
+        height: 88px;
+        border-radius: 50%;
+        background: var(--navy);
+        color: #fff;
+        display: grid;
+        place-items: center;
+        font-size: 28px;
+        font-weight: 800;
+        letter-spacing: .04em;
+        box-shadow: 0 0 0 6px var(--orange-soft);
+        margin-bottom: 10px;
+    }
+
+    .dev-name {
+        font-size: 19px;
+        font-weight: 800;
+        color: var(--text);
+        line-height: 1.3;
+    }
+
+    .dev-role {
+        margin-top: 2px;
+        padding: 5px 12px;
+        border-radius: 14px;
+        background: var(--orange-soft);
+        color: var(--orange-dark);
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.4;
+    }
+
+    .dev-org {
+        font-size: 14px;
+        color: var(--muted);
+        margin: 4px 0 14px;
+    }
+
+    .dev-email {
+        /* sits at the bottom of every card, so all cards line up */
+        margin-top: auto;
+        width: 100%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-btn);
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 600;
+        text-decoration: none;
+        overflow-wrap: anywhere;
+        transition: background .15s, border-color .15s, color .15s;
+    }
+
+    .dev-email .icon {
+        flex: none;
+    }
+
+    .dev-email:hover {
+        background: var(--orange-soft);
+        border-color: var(--orange);
+        color: var(--orange-dark);
+    }
+
+    /* ---- Contact, acknowledgements, footer ---- */
+    .contact-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        margin-top: 14px;
+        font-size: 16px;
+    }
+
+    .contact-row .label {
+        min-width: 72px;
+    }
+
+    .about-link {
+        color: var(--blue);
+        font-weight: 600;
+        word-break: break-all;
+    }
+
+    .about-link:hover {
+        text-decoration: underline;
+    }
+
+    .ack-list {
+        list-style: none;
+        margin: 18px 0 0;
+        padding: 0;
+        display: grid;
+        gap: 16px;
+    }
+
+    .ack-list li {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding-left: 16px;
+        border-left: 3px solid var(--orange-soft);
+    }
+
+    .ack-name {
+        font-weight: 700;
+        color: var(--text);
+    }
+
+    .ack-role {
+        font-size: 14px;
+        color: var(--muted);
+    }
+
+    .about-footer {
+        text-align: center;
+        color: var(--faint);
+        font-size: 14px;
+        padding-bottom: 8px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- 1. ABOUT THE SYSTEM -->
+<section class="card">
+    <h2 class="card-title">{{ icon('info', 22) }} About the System</h2>
+    <h3 class="about-name">Barangay Queuing and Attendance Management System</h3>
+    <div class="about-meta">
+        <span class="count-pill">Version 1.0.1</span>
+        <span class="hint">2026</span>
+        <span class="hint">&middot; Installed for {{ barangay_name }}</span>
+    </div>
+    <p class="about-desc">An offline queue, service and attendance system for barangay offices. One Windows desktop
+        app, with no internet and no server to maintain.</p>
+</section>
+
+<!-- 2. DEVELOPERS -->
+<section class="card">
+    <h2 class="card-title">{{ icon('user', 22) }} Developers</h2>
+    <div class="dev-grid">
+
+        <article class="dev-card">
+            <div class="dev-avatar" aria-hidden="true">JD</div>
+            <h3 class="dev-name">Joseph R. Dionisio</h3>
+            <p class="dev-role">Full Stack Developer</p>
+            <p class="dev-org">University of La Salette, Inc.</p>
+            <a class="dev-email" href="mailto:dionisiojoseph213@gmail.com">{{ icon('mail', 16) }}
+                dionisiojoseph213@gmail.com</a>
+        </article>
+
+        <article class="dev-card">
+            <div class="dev-avatar" aria-hidden="true">JM</div>
+            <h3 class="dev-name">Jhade Lorenz G. Martin</h3>
+            <p class="dev-role">Documentation, Hardware Integration and Testing Support</p>
+            <p class="dev-org">University of La Salette, Inc.</p>
+            <a class="dev-email" href="mailto:jhadelorenz650@gmail.com">{{ icon('mail', 16) }}
+                jhadelorenz650@gmail.com</a>
+        </article>
+
+        <article class="dev-card">
+            <div class="dev-avatar" aria-hidden="true">KM</div>
+            <h3 class="dev-name">Katrina Jessica Manzanillo</h3>
+            <p class="dev-role">QA Lead, Client Coordination and Consultation</p>
+            <p class="dev-org">University of La Salette, Inc.</p>
+            <a class="dev-email" href="mailto:manzanillokatrina1325@gmail.com">{{ icon('mail', 16) }}
+                manzanillokatrina1325@gmail.com</a>
+        </article>
+
+    </div>
+</section>
+
+<!-- 3. TECHNOLOGIES USED -->
+<section class="card">
+    <h2 class="card-title">{{ icon('database', 22) }} Technologies Used</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Technologies</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="cell-primary">Languages</td>
+                    <td>Python 3.13, JavaScript, HTML5, CSS3</td>
+                </tr>
+                <tr>
+                    <td class="cell-primary">Backend</td>
+                    <td>FastAPI, Uvicorn</td>
+                </tr>
+                <tr>
+                    <td class="cell-primary">Database</td>
+                    <td>SQLite, SQLAlchemy, Alembic (migrations, development only)</td>
+                </tr>
+                <tr>
+                    <td class="cell-primary">Frontend</td>
+                    <td>Jinja2 templates, plain CSS, vanilla JavaScript, Plus Jakarta Sans</td>
+                </tr>
+                <tr>
+                    <td class="cell-primary">Live updates &amp; audio</td>
+                    <td>FastAPI WebSockets, pre-recorded MP3 announcements</td>
+                </tr>
+                <tr>
+                    <td class="cell-primary">Security</td>
+                    <td>Session cookies (Starlette), bcrypt password hashing</td>
+                </tr>
+                <tr>
+                    <td class="cell-primary">Printing</td>
+                    <td>python-escpos, pywin32 (ESC/POS thermal printer)</td>
+                </tr>
+                <tr>
+                    <td class="cell-primary">Desktop &amp; packaging</td>
+                    <td>pywebview, PyInstaller, Inno Setup</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- 4. CONTACT -->
+<section class="card">
+    <h2 class="card-title">{{ icon('mail', 22) }} Contact</h2>
+    <p class="hint">Questions, bug reports or support requests? Reach us here.</p>
+    <div class="contact-row">
+        <span class="label">Email</span>
+        <a class="about-link" href="mailto:softtech.builders26@gmail.com">softtech.builders26@gmail.com</a>
+    </div>
+    <div class="contact-row">
+        <span class="label">GitHub</span>
+        <a class="about-link" href="https://github.com/mathW1zzard/barangay-queue-management-system" target="_blank"
+            rel="noopener noreferrer">github.com/mathW1zzard/barangay-queue-management-system</a>
+    </div>
+</section>
+
+<!-- 5. ACKNOWLEDGEMENTS -->
+<section class="card">
+    <h2 class="card-title">{{ icon('check', 22) }} Acknowledgements</h2>
+    <p class="hint">With sincere thanks to the people and communities who made this system possible.</p>
+    <ul class="ack-list">
+        <li><span class="ack-name">Hon. Leo Aguilar Umipig</span><span class="ack-role">Barangay Captain</span></li>
+        <!-- add a role line here if you like -->
+        <li><span class="ack-name">Mary Joy D. Del Mundo</span><span class="ack-role">Barangay Secretary</span></li>
+        <li><span class="ack-name">Prof. King Christian D. Antonio</span><span class="ack-role">Project adviser</span>
+        </li>
+        <li><span class="ack-name">University of La Salette, Inc.</span><span class="ack-role">School</span></li>
+    </ul>
+</section>
+
+<p class="about-footer">&copy; 2026 Soft-Tech Builders</p>
+{% endblock %}

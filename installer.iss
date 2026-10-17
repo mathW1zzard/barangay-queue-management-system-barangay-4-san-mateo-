@@ -4,7 +4,7 @@
 ; Output: installer_output\BarangayQueueSetup.exe
 
 #define MyAppName "Barangay Queuing and Attendance Management"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "Soft-Tech Builders"
 #define MyAppExeName "Barangay_Queuing_Attendance_Management.exe"
 #define MyBuildDir "dist\Barangay_Queuing_Attendance_Management"

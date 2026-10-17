@@ -1902,6 +1902,13 @@ def purge_old_records(request: Request, cutoff: str = Form(...)):
     return RedirectResponse(url="/maintenance", status_code=303)
 
 # Public display page: ticket numbers only, never names
+
+# ABOUT
+@app.get("/about", dependencies=[Depends(login_required)])
+def show_about(request: Request):
+    return templates.TemplateResponse(request, "about.html", {})
+
+
 @app.get("/display")
 def display_page(request: Request):
     return templates.TemplateResponse(request, "display.html", {})

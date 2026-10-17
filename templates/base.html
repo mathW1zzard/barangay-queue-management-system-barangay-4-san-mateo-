@@ -33,6 +33,7 @@
                 ('/services', 'Services', 'landmark'),
                 ('/audit_logs', 'Audit Logs', 'clipboard'),
                 ('/maintenance', 'Maintenance', 'database'),
+                ('/about', 'About', 'info'),
                 ] %}
                 {% for href, label, ico in nav_items %}
                 <a href="{{ href }}" class="nav-link{{ ' active' if path.startswith(href) }}" {% if

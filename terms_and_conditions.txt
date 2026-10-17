@@ -1,4 +1,5 @@
 BARANGAY QUEUING AND ATTENDANCE MANAGEMENT SYSTEM
+
 TERMS AND CONDITIONS OF USE
 
 Please read these terms carefully. By selecting "I accept the agreement" you confirm that you have read, understood and agreed to them. If you do not agree, select "I do not accept" and the installation will stop.

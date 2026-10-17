@@ -113,8 +113,16 @@
     <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
     <path d="M12 9v4" />
     <path d="M12 17h.01" />
+    {%- elif name == 'info' -%}
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 16v-4" />
+    <path d="M12 8h.01" />
+    {%- elif name == 'mail' -%}
+    <rect width="20" height="16" x="2" y="4" rx="2" />
+    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
     {%- elif name == 'app-icon' -%}
-    <img src="../static/app-icon.png" alt="app icon" style="position: absolute;  width: 40px; height: 40px; border-radius: 14px;">
+    <img src="../static/app-icon.png" alt="app icon"
+        style="position: absolute;  width: 40px; height: 40px; border-radius: 14px;">
     {%- endif -%}
 </svg>
 {%- endmacro %}

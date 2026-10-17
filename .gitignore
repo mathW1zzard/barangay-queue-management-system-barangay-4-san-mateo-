@@ -16,6 +16,7 @@ backups/
 # Secrets and logs
 *.key
 app.log*
+printer_settings.json*
 backup_folder.txt
 last_ticket_printed.txt
 

@@ -17,6 +17,7 @@ backups/
 *.key
 app.log*
 printer_settings.json*
+installer.iss*
 backup_folder.txt
 last_ticket_printed.txt
 

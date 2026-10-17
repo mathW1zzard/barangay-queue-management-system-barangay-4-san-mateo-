@@ -78,8 +78,6 @@ This system replaces that with:
 
 ### Run from source
 
-To build the installer, run `build.bat` (PyInstaller), then open `installer.iss` in [Inno Setup](https://jrsoftware.org/isinfo.php) and press **Ctrl+F9**. The result is `installer_output\Barangay_Queuing_Attendance_Management_Setup.exe`.
-
 The app is built for Windows. For development without a printer, set the environment variable `BQS_DUMMY_PRINTER=1`: each slip is then written to `last_ticket_printed.txt` instead of being printed.
 
 ## Built with

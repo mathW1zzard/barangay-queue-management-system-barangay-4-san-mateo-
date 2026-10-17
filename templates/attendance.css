@@ -1,0 +1,271 @@
+:root {
+    --navy: #1b2a4a;
+    --orange: #e87722;
+    --muted: #6b7690;
+    --line: #dfe3ec;
+    --green: #16a34a;
+    --light-gray: #F3F4F6;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: #e6e8ec;
+    color: var(--navy);
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+    font-size: 12px;
+}
+
+/* ---------- Toolbar (screen only) ---------- */
+.toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: #fff;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 20px;
+}
+
+.filters-text {
+    color: var(--muted);
+    flex: 1;
+}
+
+.btn-print {
+    background: var(--orange);
+    color: #fff;
+    border: 0;
+    border-radius: 6px;
+    padding: 8px 18px;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.btn-print:focus-visible {
+    outline: 2px solid var(--navy);
+    outline-offset: 2px;
+}
+
+/* ---------- Back Button ---------- */
+
+.btn-back {
+    background: var(--light-gray);
+    color: #000080;
+    border: 0;
+    border-radius: 6px;
+    padding: 8px 18px;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+
+}
+
+/* ---------- Report (fluid - fills whatever paper size prints) ---------- */
+.page {
+    width: 100%;
+    max-width: 900px;
+    /* just a comfortable on-screen preview width */
+    margin: 24px auto 48px;
+    background: #fff;
+    padding: 40px 44px;
+    box-shadow: 0 2px 14px rgba(27, 42, 74, .18);
+}
+
+.rpt-head {
+    display: flex;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--navy);
+    
+}
+
+.header{
+    display: block;
+    justify-content: center;
+    align-items: center;
+}
+
+.title{
+    text-align: center;
+}
+
+.rpt-head h1 {
+    margin: 2px 0 0;
+    font-size: 20px;
+}
+
+
+
+.rpt-head strong {
+    color: var(--navy);
+    font-size: 15px;
+}
+
+.cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin: 18px 0;
+}
+
+.card {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 14px;
+    background: #f8f9fc;
+}
+
+.card .label {
+    color: var(--muted);
+    font-size: 10.5px;
+}
+
+.card .value {
+    font-size: 24px;
+    font-weight: 800;
+    margin-top: 2px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 14px;
+}
+
+/* Repeats the column headers on every printed page automatically -
+           no manual page-splitting needed for this. */
+thead {
+    display: table-header-group;
+}
+
+th {
+    text-align: left;
+    font-size: 10.5px;
+    padding: 7px 6px;
+    border-bottom: 2px solid var(--navy);
+}
+
+td {
+    padding: 8px 6px;
+    border-bottom: 1px solid var(--line);
+}
+
+td.muted {
+    color: var(--muted);
+}
+
+.st-completed {
+    color: var(--green);
+    font-weight: 700;
+}
+
+.st-no_show {
+    color: var(--orange);
+    font-weight: 700;
+}
+
+/* A row is never cut in half across a page break, whatever the
+           paper size ends up being. */
+tr {
+    break-inside: avoid;
+}
+
+.empty {
+    text-align: center;
+    color: var(--muted);
+    padding: 28px 0;
+}
+
+.signatures {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 56px;
+    break-inside: avoid;
+}
+
+.sign {
+    min-width: 200px;
+}
+
+.sign .role {
+    color: var(--muted);
+    font-size: 10.5px;
+    margin-bottom: 30px;
+}
+
+.sign .name {
+    display: inline-block;
+    border-bottom: 1px solid var(--navy);
+    font-weight: 700;
+    padding-bottom: 2px;
+    min-width: 200px;
+}
+
+.sign .title {
+    color: var(--muted);
+    font-size: 10.5px;
+    margin-top: 3px;
+}
+
+.logo {
+    width: 320px;
+    /* Set your desired uniform width */
+    height: 100px;
+    /* Set your desired uniform height */
+    display: flex;
+}
+
+.logo img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.attendance-report{
+    display: flex;
+    justify-content: end;
+    font-size: 15px;
+}
+/* ---------- Print ---------- */
+@media print {
+
+    /*
+                No `size:` here on purpose - leaving it out means the
+                browser uses whatever paper the user picks in their own
+                print dialog (Letter/A4/Legal/etc). Only the margin is ours.
+            */
+    @page {
+        margin: 12mm;
+    }
+
+    body {
+        background: #fff;
+    }
+
+    .toolbar {
+        display: none;
+    }
+
+    /* .page becomes fluid for print: it fills the @page box the
+               browser is already sizing to the chosen paper, instead of
+               staying pinned to a fixed on-screen preview width. */
+    .page {
+        width: auto;
+        max-width: none;
+        margin: 0;
+        padding: 0;
+        box-shadow: none;
+    }
+
+    * {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}

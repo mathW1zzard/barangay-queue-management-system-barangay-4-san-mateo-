@@ -14,7 +14,7 @@ A secretary registers each walk-in visitor, prints a numbered slip, and calls vi
 |:--:|:--:|
 | ![Client registration](docs/screenshots/client-registration.png)<br>**Register a visitor and issue a ticket** | ![Queue management](docs/screenshots/queue-management.png)<br>**Call, complete, skip or mark no-show** |
 | ![Attendance](docs/screenshots/attendance.png)<br>**Searchable attendance history** | ![Dashboard](docs/screenshots/dashboard.png)<br>**Today at a glance** 
-| ![Services](docs/screenshots/services.png)<br>**add, edit, delete a service** |
+| ![Services](docs/screenshots/service.png)<br>**add, edit, delete a service** |
 
 **Current version:** 1.0.1
 
